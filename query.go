@@ -23,6 +23,7 @@ type Options struct {
 	resolver     net.IP
 	master       net.IP
 	masterSerial uint32
+	delta        int
 }
 
 //
@@ -33,15 +34,6 @@ func AddressString(addr string, port int) string {
 		return addr + ":" + strconv.Itoa(port)
 	}
 	return "[" + addr + "]" + ":" + strconv.Itoa(port)
-}
-
-//
-// GetQueryOpts - obtain an initialized query Options struct
-//
-func GetQueryOpts() (opts Options) {
-	opts.timeout = time.Second * 2
-	opts.retries = 3
-	return opts
 }
 
 //

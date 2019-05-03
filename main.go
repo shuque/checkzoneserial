@@ -8,6 +8,7 @@ import (
 	"path"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/miekg/dns"
 )
@@ -191,7 +192,7 @@ func printMasterSerial(zone string, popts *Options) {
 
 }
 
-func printResult(r *Response, opts Options) {
+func printResult(r *Response, opts Options) bool {
 
 	if r.err == nil {
 		delta := opts.masterSerial - r.serial
@@ -200,18 +201,29 @@ func printResult(r *Response, opts Options) {
 		} else {
 			fmt.Printf("%15d %s %s\n", r.serial, r.nsname, r.nsip)
 		}
-	} else {
-		fmt.Printf("Error: %s %s: couldn't obtain serial: %s\n",
-			r.nsname, r.nsip, r.err.Error())
+		if delta > uint32(opts.delta) {
+			return false
+		}
+		return true
 	}
+
+	fmt.Printf("Error: %s %s: couldn't obtain serial: %s\n",
+		r.nsname, r.nsip, r.err.Error())
+	return false
 
 }
 
-func doFlags(popts *Options) string {
+func doFlags() (string, Options) {
 
-	flag.BoolVar(&popts.useV6, "6", false, "use IPv6 only")
-	flag.BoolVar(&popts.useV4, "4", false, "use IPv4 only")
+	var opts Options
+
+	flag.BoolVar(&opts.useV6, "6", false, "use IPv6 only")
+	flag.BoolVar(&opts.useV4, "4", false, "use IPv4 only")
 	master := flag.String("m", "", "master server address")
+	flag.IntVar(&opts.delta, "d", 0, "allowed serial number drift")
+	timeoutp := flag.Int("t", 3, "query timeout in seconds")
+	opts.timeout = time.Second * time.Duration(*timeoutp)
+	flag.IntVar(&opts.retries, "r", 3, "number of query retries")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] <zone>\n", path.Base(os.Args[0]))
@@ -221,8 +233,8 @@ func doFlags(popts *Options) string {
 	flag.Parse()
 
 	if *master != "" {
-		popts.master = net.ParseIP(*master)
-		if popts.master == nil {
+		opts.master = net.ParseIP(*master)
+		if opts.master == nil {
 			fmt.Printf("Invalid master address: %s\n", *master)
 			os.Exit(1)
 		}
@@ -235,18 +247,17 @@ func doFlags(popts *Options) string {
 		os.Exit(1)
 	}
 
-	return args[0]
+	return args[0], opts
 }
 
 func main() {
 
 	var err error
-	var opts Options
 	var nsNameList []string
 	var requests []*Request
 
-	opts = GetQueryOpts()
-	zone := dns.Fqdn(doFlags(&opts))
+	zone, opts := doFlags()
+	zone = dns.Fqdn(zone)
 
 	opts.resolver, err = GetResolver()
 	if err != nil {
@@ -259,6 +270,7 @@ func main() {
 
 	opts.rdflag = false
 
+	fmt.Printf("Zone: %s\n", zone)
 	if opts.master != nil {
 		printMasterSerial(zone, &opts)
 	}
@@ -273,8 +285,11 @@ func main() {
 		close(results)
 	}()
 
+	rc := 0
 	for r := range results {
-		printResult(r, opts)
+		if !printResult(r, opts) {
+			rc = 2
+		}
 	}
-
+	os.Exit(rc)
 }

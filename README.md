@@ -25,14 +25,28 @@ $ checkzoneserial
 Usage: checkzoneserial [options] <zone>
   -4    use IPv4 only
   -6    use IPv6 only
+  -d int
+        allowed serial number drift
   -m string
         master server address
+  -r int
+        number of query retries (default 3)
+  -t int
+        query timeout in seconds (default 3)
 ```
+
+### Return codes
+
+* 0 on success
+* 1 on program invocation error
+* 2 on detection of server issues (timeout, bad response, serial drift, etc)
+
 
 ### Example run
 
 ```
 $ checkzoneserial -m 10.11.12.13 siteforce.com
+Zone: siteforce.com
      2019120538 [   MASTER] 10.11.12.13 10.11.12.13
      2019120538 [        0] udns1.salesforce.com. 2001:502:2eda::8
      2019120537 [        1] pch1.salesforce-dns.com. 206.223.122.1
@@ -48,10 +62,29 @@ $ checkzoneserial -m 10.11.12.13 siteforce.com
 
 ```
 $ checkzoneserial -m 10.11.12.13 -6 siteforce.com
+Zone: siteforce.com
      2019120538 [   MASTER] 10.11.12.13 10.11.12.13
      2019120538 [        0] pch1.salesforce-dns.com. 2620:171:809::1
      2019120538 [        0] udns1.salesforce.com. 2001:502:2eda::8
      2019120538 [        0] udns2.salesforce.com. 2001:502:ad09::8
      2019120538 [        0] udns3.salesforce.com. 2610:a1:1009::8
      2019120538 [        0] udns4.salesforce.com. 2610:a1:1010::8
+```
+
+```
+$ checkzoneserial -m 10.11.12.13 -d 2 appforce.com
+Zone: appforce.com.
+     2001771862 [   MASTER]  10.11.12.13 10.11.12.13
+     2001771861 [        1] pch1.salesforce-dns.com. 2620:171:809::1
+     2001771861 [        1] pch1.salesforce-dns.com. 206.223.122.1
+     2001771859 [        3] udns2.salesforce.com. 2001:502:ad09::8
+     2001771859 [        3] udns1.salesforce.com. 2001:502:2eda::8
+     2001771861 [        1] udns4.salesforce.com. 156.154.103.8
+     2001771861 [        1] udns1.salesforce.com. 156.154.100.8
+     2001771861 [        1] udns3.salesforce.com. 156.154.102.8
+     2001771861 [        1] udns2.salesforce.com. 156.154.101.8
+     2001771861 [        1] udns4.salesforce.com. 2610:a1:1010::8
+     2001771861 [        1] udns3.salesforce.com. 2610:a1:1009::8
+$ echo $?
+2
 ```
