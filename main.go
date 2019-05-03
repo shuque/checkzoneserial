@@ -252,7 +252,8 @@ func doFlags() (string, Options) {
 	flag.BoolVar(&opts.useV6, "6", false, "use IPv6 only")
 	flag.BoolVar(&opts.useV4, "4", false, "use IPv4 only")
 	master := flag.String("m", "", "master server address")
-	flag.StringVar(&opts.additional, "a", "", "additional name servers: n1,n2..")
+	flag.StringVar(&opts.additional, "a", "", "additional nameservers: n1,n2..")
+	flag.BoolVar(&opts.noqueryns, "n", false, "don't query advertised nameservers")
 	flag.IntVar(&opts.delta, "d", 0, "allowed serial number drift")
 	timeoutp := flag.Int("t", 3, "query timeout in seconds")
 	opts.timeout = time.Second * time.Duration(*timeoutp)
@@ -300,7 +301,9 @@ func main() {
 	if opts.additional != "" {
 		nsNameList = getAdditionalServers(opts)
 	}
-	nsNameList = append(nsNameList, getNSnames(zone, opts)...)
+	if !opts.noqueryns {
+		nsNameList = append(nsNameList, getNSnames(zone, opts)...)
+	}
 	requests = getRequests(nsNameList, opts)
 
 	opts.rdflag = false

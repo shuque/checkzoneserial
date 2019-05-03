@@ -23,6 +23,7 @@ type Options struct {
 	resolver     net.IP
 	master       net.IP
 	additional   string
+	noqueryns    bool
 	masterSerial uint32
 	delta        int
 }

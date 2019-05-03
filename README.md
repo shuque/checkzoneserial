@@ -31,6 +31,7 @@ Usage: checkzoneserial [options] <zone>
         allowed serial number drift
   -m string
         master server address
+  -n    don't query advertised nameservers
   -r int
         number of query retries (default 3)
   -t int
