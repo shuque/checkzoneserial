@@ -195,14 +195,14 @@ func printMasterSerial(zone string, popts *Options) {
 func printResult(r *Response, opts Options) bool {
 
 	if r.err == nil {
-		delta := opts.masterSerial - r.serial
 		if opts.master != nil {
+			delta := opts.masterSerial - r.serial
 			fmt.Printf("%15d [%9d] %s %s\n", r.serial, delta, r.nsname, r.nsip)
+			if delta > uint32(opts.delta) {
+				return false
+			}
 		} else {
 			fmt.Printf("%15d %s %s\n", r.serial, r.nsname, r.nsip)
-		}
-		if delta > uint32(opts.delta) {
-			return false
 		}
 		return true
 	}
