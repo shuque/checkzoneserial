@@ -32,8 +32,8 @@ Usage: checkzoneserial [options] <zone>
 ### Example run
 
 ```
-$ ./checkzoneserial -m 18.213.55.141 siteforce.com
-     2019120538 [   MASTER] 18.213.55.141 18.213.55.141
+$ ./checkzoneserial -m 10.11.12.13 siteforce.com
+     2019120538 [   MASTER] 10.11.12.13 10.11.12.13
      2019120538 [        0] udns1.salesforce.com. 2001:502:2eda::8
      2019120538 [        0] pch1.salesforce-dns.com. 206.223.122.1
      2019120538 [        0] pch1.salesforce-dns.com. 2620:171:809::1
