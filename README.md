@@ -25,6 +25,8 @@ $ checkzoneserial
 Usage: checkzoneserial [options] <zone>
   -4    use IPv4 only
   -6    use IPv6 only
+  -a string
+        additional name servers: n1,n2..
   -d int
         allowed serial number drift
   -m string

@@ -22,6 +22,7 @@ type Options struct {
 	retries      int
 	resolver     net.IP
 	master       net.IP
+	additional   string
 	masterSerial uint32
 	delta        int
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -149,6 +150,7 @@ func getNSnames(zone string, opts Options) []string {
 
 func getRequests(nsNameList []string, opts Options) []*Request {
 
+	var ip net.IP
 	var aList []net.IP
 	var requests []*Request
 	var r *Request
@@ -156,6 +158,14 @@ func getRequests(nsNameList []string, opts Options) []*Request {
 	sort.Strings(nsNameList)
 
 	for _, nsName := range nsNameList {
+		ip = net.ParseIP(nsName)
+		if ip != nil {
+			r = new(Request)
+			r.nsname = nsName
+			r.nsip = ip
+			requests = append(requests, r)
+			continue
+		}
 		aList = make([]net.IP, 0)
 		if !opts.useV4 {
 			aList = append(aList,
@@ -216,6 +226,25 @@ func printResult(r *Response, opts Options) bool {
 
 }
 
+func getAdditionalServers(opts Options) []string {
+
+	var s []string
+	var ip net.IP
+
+	s0 := strings.Split(opts.additional, ",")
+
+	for _, x := range s0 {
+		ip = net.ParseIP(x)
+		if ip != nil {
+			s = append(s, x)
+		} else {
+			s = append(s, dns.Fqdn(x))
+		}
+	}
+
+	return s
+}
+
 func doFlags() (string, Options) {
 
 	var opts Options
@@ -223,6 +252,7 @@ func doFlags() (string, Options) {
 	flag.BoolVar(&opts.useV6, "6", false, "use IPv6 only")
 	flag.BoolVar(&opts.useV4, "4", false, "use IPv4 only")
 	master := flag.String("m", "", "master server address")
+	flag.StringVar(&opts.additional, "a", "", "additional name servers: n1,n2..")
 	flag.IntVar(&opts.delta, "d", 0, "allowed serial number drift")
 	timeoutp := flag.Int("t", 3, "query timeout in seconds")
 	opts.timeout = time.Second * time.Duration(*timeoutp)
@@ -245,7 +275,6 @@ func doFlags() (string, Options) {
 
 	args := flag.Args()
 	if len(args) != 1 {
-		fmt.Printf("Error: bad usage\n")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -268,7 +297,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	nsNameList = getNSnames(zone, opts)
+	if opts.additional != "" {
+		nsNameList = getAdditionalServers(opts)
+	}
+	nsNameList = append(nsNameList, getNSnames(zone, opts)...)
 	requests = getRequests(nsNameList, opts)
 
 	opts.rdflag = false
