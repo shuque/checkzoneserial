@@ -42,7 +42,22 @@ Usage: checkzoneserial [options] <zone>
 * 2 on detection of server issues (timeout, bad response, serial drift, etc)
 
 
-### Example run
+### Example runs
+
+```
+$ checkzoneserial upenn.edu
+Zone: upenn.edu.
+     1007401858 adns3.upenn.edu. 128.91.251.33
+     1007401858 adns1.upenn.edu. 128.91.3.128
+     1007401858 dns1.udel.edu. 128.175.13.16
+     1007401858 dns2.udel.edu. 128.175.13.17
+     1007401858 adns2.upenn.edu. 128.91.254.22
+     1007401858 adns3.upenn.edu. 2607:f470:1003::3:c
+     1007401858 adns1.upenn.edu. 2607:f470:1001::1:a
+     1007401858 adns2.upenn.edu. 2607:f470:1002::2:3
+     1007401858 sns-pb.isc.org. 192.5.4.1
+     1007401858 sns-pb.isc.org. 2001:500:2e::1
+```
 
 ```
 $ checkzoneserial -m 10.11.12.13 siteforce.com
@@ -69,6 +84,8 @@ Zone: siteforce.com
      2019120538 [        0] udns2.salesforce.com. 2001:502:ad09::8
      2019120538 [        0] udns3.salesforce.com. 2610:a1:1009::8
      2019120538 [        0] udns4.salesforce.com. 2610:a1:1010::8
+$ echo $?
+0
 ```
 
 ```
