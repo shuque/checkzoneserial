@@ -105,7 +105,7 @@ func getSerial(zone string, ip net.IP, opts Options) (serial uint32, err error) 
 		ip.String())
 }
 
-func getAllSerials(zone string, ip net.IP, nsName string, opts Options) {
+func getSerialAsync(zone string, ip net.IP, nsName string, opts Options) {
 
 	defer wg.Done()
 
@@ -267,7 +267,7 @@ func main() {
 		for _, x := range requests {
 			wg.Add(1)
 			tokens <- struct{}{}
-			go getAllSerials(zone, x.nsip, x.nsname, opts)
+			go getSerialAsync(zone, x.nsip, x.nsname, opts)
 		}
 		wg.Wait()
 		close(results)
