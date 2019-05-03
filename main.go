@@ -196,9 +196,12 @@ func printResult(r *Response, opts Options) bool {
 
 	if r.err == nil {
 		if opts.master != nil {
-			delta := opts.masterSerial - r.serial
+			delta := int(opts.masterSerial) - int(r.serial)
 			fmt.Printf("%15d [%9d] %s %s\n", r.serial, delta, r.nsname, r.nsip)
-			if delta > uint32(opts.delta) {
+			if delta < 0 {
+				delta = -delta
+			}
+			if delta > opts.delta {
 				return false
 			}
 		} else {
