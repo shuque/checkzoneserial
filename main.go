@@ -15,6 +15,26 @@ import (
 )
 
 //
+// Options - query options
+//
+type Options struct {
+	qopts QueryOptions
+	//	rdflag       bool
+	//	adflag       bool
+	//	cdflag       bool
+	useV6 bool
+	useV4 bool
+	//	timeout      time.Duration
+	//	retries      int
+	resolver     net.IP
+	master       net.IP
+	additional   string
+	noqueryns    bool
+	masterSerial uint32
+	delta        int
+}
+
+//
 // Request - request parameters
 //
 type Request struct {
@@ -44,11 +64,11 @@ func getIPAddresses(hostname string, rrtype uint16, resolver net.IP, opts Option
 	var rrAAAA *dns.AAAA
 	var ipList []net.IP
 
-	opts.rdflag = true
+	opts.qopts.rdflag = true
 
 	switch rrtype {
 	case dns.TypeAAAA:
-		response, err := SendQuery(hostname, rrtype, resolver, opts)
+		response, err := SendQuery(hostname, rrtype, resolver, opts.qopts)
 		if err != nil || response == nil {
 			break
 		}
@@ -59,7 +79,7 @@ func getIPAddresses(hostname string, rrtype uint16, resolver net.IP, opts Option
 			}
 		}
 	case dns.TypeA:
-		response, err := SendQuery(hostname, rrtype, resolver, opts)
+		response, err := SendQuery(hostname, rrtype, resolver, opts.qopts)
 		if err != nil || response == nil {
 			break
 		}
@@ -81,9 +101,9 @@ func getSerial(zone string, ip net.IP, opts Options) (serial uint32, err error) 
 
 	var response *dns.Msg
 
-	opts.rdflag = false
+	opts.qopts.rdflag = false
 
-	response, err = SendQuery(zone, dns.TypeSOA, ip, opts)
+	response, err = SendQuery(zone, dns.TypeSOA, ip, opts.qopts)
 	if err != nil {
 		return serial, err
 	}
@@ -127,8 +147,8 @@ func getNSnames(zone string, opts Options) []string {
 	var rrNS *dns.NS
 	var nsNameList []string
 
-	opts.rdflag = true
-	response, err := SendQuery(zone, dns.TypeNS, opts.resolver, opts)
+	opts.qopts.rdflag = true
+	response, err := SendQuery(zone, dns.TypeNS, opts.resolver, opts.qopts)
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
@@ -248,6 +268,9 @@ func getAdditionalServers(opts Options) []string {
 func doFlags() (string, Options) {
 
 	var opts Options
+	var qopts QueryOptions
+
+	opts.qopts = qopts
 
 	flag.BoolVar(&opts.useV6, "6", false, "use IPv6 only")
 	flag.BoolVar(&opts.useV4, "4", false, "use IPv4 only")
@@ -256,8 +279,8 @@ func doFlags() (string, Options) {
 	flag.BoolVar(&opts.noqueryns, "n", false, "don't query advertised nameservers")
 	flag.IntVar(&opts.delta, "d", 0, "allowed serial number drift")
 	timeoutp := flag.Int("t", 3, "query timeout in seconds")
-	opts.timeout = time.Second * time.Duration(*timeoutp)
-	flag.IntVar(&opts.retries, "r", 3, "number of query retries")
+	opts.qopts.timeout = time.Second * time.Duration(*timeoutp)
+	flag.IntVar(&opts.qopts.retries, "r", 3, "number of query retries")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] <zone>\n", path.Base(os.Args[0]))
@@ -274,12 +297,11 @@ func doFlags() (string, Options) {
 		}
 	}
 
-	args := flag.Args()
-	if len(args) != 1 {
+	if flag.NArg() != 1 {
 		flag.Usage()
 		os.Exit(1)
 	}
-
+	args := flag.Args()
 	return args[0], opts
 }
 
@@ -306,7 +328,7 @@ func main() {
 	}
 	requests = getRequests(nsNameList, opts)
 
-	opts.rdflag = false
+	opts.qopts.rdflag = false
 
 	fmt.Printf("Zone: %s\n", zone)
 	if opts.master != nil {
