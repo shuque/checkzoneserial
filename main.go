@@ -64,8 +64,7 @@ func getFirstIPv4Address(hostname string, opts Options) net.IP {
 	if err == nil {
 		for _, rr := range response.Answer {
 			if rr.Header().Rrtype == dns.TypeA {
-				rrA := rr.(*dns.A)
-				return rrA.A
+				return rr.(*dns.A).A
 			}
 		}
 	}
@@ -75,8 +74,6 @@ func getFirstIPv4Address(hostname string, opts Options) net.IP {
 
 func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
 
-	var rrA *dns.A
-	var rrAAAA *dns.AAAA
 	var ipList []net.IP
 
 	opts.qopts.rdflag = true
@@ -89,8 +86,7 @@ func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
 		}
 		for _, rr := range response.Answer {
 			if rr.Header().Rrtype == dns.TypeAAAA {
-				rrAAAA = rr.(*dns.AAAA)
-				ipList = append(ipList, rrAAAA.AAAA)
+				ipList = append(ipList, rr.(*dns.AAAA).AAAA)
 			}
 		}
 	case dns.TypeA:
@@ -100,8 +96,7 @@ func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
 		}
 		for _, rr := range response.Answer {
 			if rr.Header().Rrtype == dns.TypeA {
-				rrA = rr.(*dns.A)
-				ipList = append(ipList, rrA.A)
+				ipList = append(ipList, rr.(*dns.A).A)
 			}
 		}
 	default:
@@ -235,6 +230,7 @@ func printMasterSerial(zone string, popts *Options) {
 	} else {
 		popts.masterName = popts.masterIP.String()
 	}
+
 	popts.masterSerial, err = getSerial(zone, popts.masterIP, *popts)
 	if err == nil {
 		fmt.Printf("%15d [%9s] %s %s\n", popts.masterSerial, "MASTER",
