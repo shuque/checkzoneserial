@@ -263,9 +263,6 @@ func getAdditionalServers(opts Options) []string {
 func doFlags() (string, Options) {
 
 	var opts Options
-	var qopts QueryOptions
-
-	opts.qopts = qopts
 
 	flag.BoolVar(&opts.useV6, "6", false, "use IPv6 only")
 	flag.BoolVar(&opts.useV4, "4", false, "use IPv4 only")
