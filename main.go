@@ -22,7 +22,8 @@ type Options struct {
 	useV6        bool
 	useV4        bool
 	resolver     net.IP
-	master       net.IP
+	masterIP     net.IP
+	masterName   string
 	additional   string
 	noqueryns    bool
 	masterSerial uint32
@@ -53,7 +54,26 @@ var numParallel uint16 = 20
 var tokens = make(chan struct{}, int(numParallel))
 var results = make(chan *Response)
 
-func getIPAddresses(hostname string, rrtype uint16, resolver net.IP, opts Options) []net.IP {
+func getFirstIPv4Address(hostname string, opts Options) net.IP {
+
+	var ip net.IP
+
+	opts.qopts.rdflag = true
+
+	response, err := SendQuery(hostname, dns.TypeA, opts.resolver, opts.qopts)
+	if err == nil {
+		for _, rr := range response.Answer {
+			if rr.Header().Rrtype == dns.TypeA {
+				rrA := rr.(*dns.A)
+				return rrA.A
+			}
+		}
+	}
+
+	return ip
+}
+
+func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
 
 	var rrA *dns.A
 	var rrAAAA *dns.AAAA
@@ -63,7 +83,7 @@ func getIPAddresses(hostname string, rrtype uint16, resolver net.IP, opts Option
 
 	switch rrtype {
 	case dns.TypeAAAA:
-		response, err := SendQuery(hostname, rrtype, resolver, opts.qopts)
+		response, err := SendQuery(hostname, rrtype, opts.resolver, opts.qopts)
 		if err != nil || response == nil {
 			break
 		}
@@ -74,7 +94,7 @@ func getIPAddresses(hostname string, rrtype uint16, resolver net.IP, opts Option
 			}
 		}
 	case dns.TypeA:
-		response, err := SendQuery(hostname, rrtype, resolver, opts.qopts)
+		response, err := SendQuery(hostname, rrtype, opts.resolver, opts.qopts)
 		if err != nil || response == nil {
 			break
 		}
@@ -184,11 +204,11 @@ func getRequests(nsNameList []string, opts Options) []*Request {
 		aList = make([]net.IP, 0)
 		if !opts.useV4 {
 			aList = append(aList,
-				getIPAddresses(nsName, dns.TypeAAAA, opts.resolver, opts)...)
+				getIPAddresses(nsName, dns.TypeAAAA, opts)...)
 		}
 		if !opts.useV6 {
 			aList = append(aList,
-				getIPAddresses(nsName, dns.TypeA, opts.resolver, opts)...)
+				getIPAddresses(nsName, dns.TypeA, opts)...)
 		}
 		for _, ip := range aList {
 			r = new(Request)
@@ -205,13 +225,23 @@ func getRequests(nsNameList []string, opts Options) []*Request {
 func printMasterSerial(zone string, popts *Options) {
 
 	var err error
-	popts.masterSerial, err = getSerial(zone, popts.master, *popts)
+
+	if popts.masterIP == nil {
+		popts.masterIP = getFirstIPv4Address(popts.masterName, *popts)
+		if popts.masterIP == nil {
+			fmt.Printf("Error: couldn't resolve master name: %s\n", popts.masterName)
+			os.Exit(1)
+		}
+	} else {
+		popts.masterName = popts.masterIP.String()
+	}
+	popts.masterSerial, err = getSerial(zone, popts.masterIP, *popts)
 	if err == nil {
 		fmt.Printf("%15d [%9s] %s %s\n", popts.masterSerial, "MASTER",
-			popts.master, popts.master)
+			popts.masterName, popts.masterIP)
 	} else {
 		fmt.Printf("Error: %s %s: couldn't obtain serial: %s\n",
-			"MASTER", popts.master, err.Error())
+			popts.masterName, popts.masterIP, err.Error())
 		os.Exit(1)
 	}
 
@@ -220,7 +250,7 @@ func printMasterSerial(zone string, popts *Options) {
 func printResult(r *Response, opts Options) bool {
 
 	if r.err == nil {
-		if opts.master != nil {
+		if opts.masterIP != nil {
 			delta := int(opts.masterSerial) - int(r.serial)
 			fmt.Printf("%15d [%9d] %s %s\n", r.serial, delta, r.nsname, r.nsip)
 			if delta < 0 {
@@ -282,10 +312,9 @@ func doFlags() (string, Options) {
 	flag.Parse()
 
 	if *master != "" {
-		opts.master = net.ParseIP(*master)
-		if opts.master == nil {
-			fmt.Printf("Invalid master address: %s\n", *master)
-			os.Exit(1)
+		opts.masterIP = net.ParseIP(*master)
+		if opts.masterIP == nil { // assume hostname
+			opts.masterName = dns.Fqdn(*master)
 		}
 	}
 
@@ -294,7 +323,7 @@ func doFlags() (string, Options) {
 		os.Exit(1)
 	}
 	args := flag.Args()
-	return args[0], opts
+	return dns.Fqdn(args[0]), opts
 }
 
 func main() {
@@ -304,7 +333,6 @@ func main() {
 	var requests []*Request
 
 	zone, opts := doFlags()
-	zone = dns.Fqdn(zone)
 
 	opts.resolver, err = GetResolver()
 	if err != nil {
@@ -323,7 +351,7 @@ func main() {
 	opts.qopts.rdflag = false
 
 	fmt.Printf("Zone: %s\n", zone)
-	if opts.master != nil {
+	if opts.masterIP != nil || opts.masterName != "" {
 		printMasterSerial(zone, &opts)
 	}
 
