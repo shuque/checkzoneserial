@@ -16,8 +16,6 @@ type QueryOptions struct {
 	rdflag  bool
 	adflag  bool
 	cdflag  bool
-	useV6   bool
-	useV4   bool
 	timeout time.Duration
 	retries int
 }

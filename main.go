@@ -18,14 +18,9 @@ import (
 // Options - query options
 //
 type Options struct {
-	qopts QueryOptions
-	//	rdflag       bool
-	//	adflag       bool
-	//	cdflag       bool
-	useV6 bool
-	useV4 bool
-	//	timeout      time.Duration
-	//	retries      int
+	qopts        QueryOptions
+	useV6        bool
+	useV4        bool
 	resolver     net.IP
 	master       net.IP
 	additional   string
