@@ -30,6 +30,13 @@ type Options struct {
 	delta        int
 }
 
+// Defaults
+var (
+	defaultTimeout     = 3
+	defaultRetries     = 3
+	defaultSerialDelta = 0
+)
+
 //
 // Request - request parameters
 //
@@ -154,7 +161,6 @@ func getSerialAsync(zone string, ip net.IP, nsName string, opts Options) {
 
 func getNSnames(zone string, opts Options) []string {
 
-	var rrNS *dns.NS
 	var nsNameList []string
 
 	opts.qopts.rdflag = true
@@ -170,8 +176,7 @@ func getNSnames(zone string, opts Options) []string {
 
 	for _, rr := range response.Answer {
 		if rr.Header().Rrtype == dns.TypeNS {
-			rrNS = rr.(*dns.NS)
-			nsNameList = append(nsNameList, rrNS.Ns)
+			nsNameList = append(nsNameList, rr.(*dns.NS).Ns)
 		}
 	}
 
@@ -295,14 +300,24 @@ func doFlags() (string, Options) {
 	master := flag.String("m", "", "master server address")
 	flag.StringVar(&opts.additional, "a", "", "additional nameservers: n1,n2..")
 	flag.BoolVar(&opts.noqueryns, "n", false, "don't query advertised nameservers")
-	flag.IntVar(&opts.delta, "d", 0, "allowed serial number drift")
-	timeoutp := flag.Int("t", 3, "query timeout in seconds")
+	flag.IntVar(&opts.delta, "d", defaultSerialDelta, "allowed serial number drift")
+	timeoutp := flag.Int("t", defaultTimeout, "query timeout in seconds")
 	opts.qopts.timeout = time.Second * time.Duration(*timeoutp)
-	flag.IntVar(&opts.qopts.retries, "r", 3, "number of query retries")
+	flag.IntVar(&opts.qopts.retries, "r", defaultRetries, "number of query retries")
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [options] <zone>\n", path.Base(os.Args[0]))
-		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, `Usage: %s [Options] <zone>
+
+	Options:
+	-4          Use IPv4 transport only
+	-6          Use IPv6 transport only
+	-t N        Query timeout value in seconds (default %d)
+	-r N        Maximum # SOA query retries for each server (default %d)
+	-d N        Allowed SOA serial number drift (default %d)
+	-m ns       Master server name/address to compare serial numbers with
+	-a ns1,..   Specify additional nameserver names/addresses to query
+	-n          Don't query advertised nameservers for the zone
+`, path.Base(os.Args[0]), defaultTimeout, defaultRetries, defaultSerialDelta)
 	}
 
 	flag.Parse()
@@ -315,6 +330,7 @@ func doFlags() (string, Options) {
 	}
 
 	if flag.NArg() != 1 {
+		fmt.Fprintf(os.Stderr, "Incorrect number of arguments.\n")
 		flag.Usage()
 		os.Exit(1)
 	}
