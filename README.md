@@ -22,20 +22,18 @@ Just run 'go build'. This will generate the executable 'checkzoneserial'.
 
 ```
 $ checkzoneserial
-Usage: checkzoneserial [options] <zone>
-  -4    use IPv4 only
-  -6    use IPv6 only
-  -a string
-        additional name servers: n1,n2..
-  -d int
-        allowed serial number drift
-  -m string
-        master server address
-  -n    don't query advertised nameservers
-  -r int
-        number of query retries (default 3)
-  -t int
-        query timeout in seconds (default 3)
+Usage: checkzoneserial [Options] <zone>
+
+	Options:
+	-4          Use IPv4 transport only
+	-6          Use IPv6 transport only
+	-t N        Query timeout value in seconds (default 3)
+	-r N        Maximum # SOA query retries for each server (default 3)
+	-d N        Allowed SOA serial number drift (default 0)
+	-m ns       Master server name/address to compare serial numbers with
+	-a ns1,..   Specify additional nameserver names/addresses to query
+	-n          Don't query advertised nameservers for the zone
+
 ```
 
 ### Return codes
@@ -46,6 +44,8 @@ Usage: checkzoneserial [options] <zone>
 
 
 ### Example runs
+
+Report zone serials for all authoritative servers for upenn.edu:
 
 ```
 $ checkzoneserial upenn.edu
@@ -61,6 +61,9 @@ Zone: upenn.edu.
      1007401858 sns-pb.isc.org. 192.5.4.1
      1007401858 sns-pb.isc.org. 2001:500:2e::1
 ```
+
+Report zone serials for siteforce.com servers, compare them to the
+master server 10.11.12.13 (-m option) and report the deltas.
 
 ```
 $ checkzoneserial -m 10.11.12.13 siteforce.com
@@ -78,6 +81,9 @@ Zone: siteforce.com
      2019120536 [        2] udns3.salesforce.com. 2610:a1:1009::8
 ```
 
+The same as the last run, but only check the IPv6 addresses of the
+servers. Since all the serials are the same, the exit code is 0.
+
 ```
 $ checkzoneserial -m 10.11.12.13 -6 siteforce.com
 Zone: siteforce.com
@@ -90,6 +96,11 @@ Zone: siteforce.com
 $ echo $?
 0
 ```
+
+Report the serials of servers for zone appforce.com, compare them to
+the master 10.11.12.13, and allow a serial number difference (-d) of
+2. Since the serials of some servers were observed to differ by more
+than this value (3 is greater than 2), the exit code is 2.
 
 ```
 $ checkzoneserial -m 10.11.12.13 -d 2 appforce.com
