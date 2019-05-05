@@ -61,24 +61,6 @@ var numParallel uint16 = 20
 var tokens = make(chan struct{}, int(numParallel))
 var results = make(chan *Response)
 
-func getFirstIPv4Address(hostname string, opts Options) net.IP {
-
-	var ip net.IP
-
-	opts.qopts.rdflag = true
-
-	response, err := SendQuery(hostname, dns.TypeA, opts.resolver, opts.qopts)
-	if err == nil {
-		for _, rr := range response.Answer {
-			if rr.Header().Rrtype == dns.TypeA {
-				return rr.(*dns.A).A
-			}
-		}
-	}
-
-	return ip
-}
-
 func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
 
 	var ipList []net.IP
@@ -221,7 +203,7 @@ func printMasterSerial(zone string, popts *Options) {
 	var err error
 
 	if popts.masterIP == nil {
-		popts.masterIP = getFirstIPv4Address(popts.masterName, *popts)
+		popts.masterIP = getIPAddresses(popts.masterName, dns.TypeA, *popts)[0]
 		if popts.masterIP == nil {
 			fmt.Printf("Error: couldn't resolve master name: %s\n", popts.masterName)
 			os.Exit(1)
