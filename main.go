@@ -295,6 +295,7 @@ func doFlags() (string, Options) {
 
 	var opts Options
 
+	help := flag.Bool("h", false, "print help string")
 	flag.BoolVar(&opts.useV6, "6", false, "use IPv6 only")
 	flag.BoolVar(&opts.useV4, "4", false, "use IPv4 only")
 	master := flag.String("m", "", "master server address")
@@ -309,6 +310,7 @@ func doFlags() (string, Options) {
 		fmt.Fprintf(os.Stderr, `Usage: %s [Options] <zone>
 
 	Options:
+	-h          Print this help string
 	-4          Use IPv4 transport only
 	-6          Use IPv6 transport only
 	-t N        Query timeout value in seconds (default %d)
@@ -321,6 +323,11 @@ func doFlags() (string, Options) {
 	}
 
 	flag.Parse()
+
+	if *help {
+		flag.Usage()
+		os.Exit(1)
+	}
 
 	if *master != "" {
 		opts.masterIP = net.ParseIP(*master)

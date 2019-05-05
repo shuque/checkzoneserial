@@ -21,10 +21,11 @@ Just run 'go build'. This will generate the executable 'checkzoneserial'.
 ### Usage
 
 ```
-$ checkzoneserial
+$ checkzoneserial -h
 Usage: checkzoneserial [Options] <zone>
 
 	Options:
+        -h          Print this help string
 	-4          Use IPv4 transport only
 	-6          Use IPv6 transport only
 	-t N        Query timeout value in seconds (default 3)
