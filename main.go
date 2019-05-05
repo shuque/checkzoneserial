@@ -203,11 +203,12 @@ func printMasterSerial(zone string, popts *Options) {
 	var err error
 
 	if popts.masterIP == nil {
-		popts.masterIP = getIPAddresses(popts.masterName, dns.TypeA, *popts)[0]
-		if popts.masterIP == nil {
+		ipv4list := getIPAddresses(popts.masterName, dns.TypeA, *popts)
+		if ipv4list == nil {
 			fmt.Printf("Error: couldn't resolve master name: %s\n", popts.masterName)
 			os.Exit(1)
 		}
+		popts.masterIP = ipv4list[0]
 	} else {
 		popts.masterName = popts.masterIP.String()
 	}
