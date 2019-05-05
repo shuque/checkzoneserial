@@ -86,24 +86,18 @@ func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
 	opts.qopts.rdflag = true
 
 	switch rrtype {
-	case dns.TypeAAAA:
+	case dns.TypeAAAA, dns.TypeA:
 		response, err := SendQuery(hostname, rrtype, opts.resolver, opts.qopts)
 		if err != nil || response == nil {
 			break
 		}
 		for _, rr := range response.Answer {
-			if rr.Header().Rrtype == dns.TypeAAAA {
-				ipList = append(ipList, rr.(*dns.AAAA).AAAA)
-			}
-		}
-	case dns.TypeA:
-		response, err := SendQuery(hostname, rrtype, opts.resolver, opts.qopts)
-		if err != nil || response == nil {
-			break
-		}
-		for _, rr := range response.Answer {
-			if rr.Header().Rrtype == dns.TypeA {
-				ipList = append(ipList, rr.(*dns.A).A)
+			if rr.Header().Rrtype == rrtype {
+				if rrtype == dns.TypeAAAA {
+					ipList = append(ipList, rr.(*dns.AAAA).AAAA)
+				} else if rrtype == dns.TypeA {
+					ipList = append(ipList, rr.(*dns.A).A)
+				}
 			}
 		}
 	default:
