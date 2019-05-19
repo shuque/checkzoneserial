@@ -149,11 +149,18 @@ func getNSnames(zone string, opts Options) []string {
 		fmt.Printf("Error: %s doesn't exist\n", zone)
 		os.Exit(1)
 	}
-
+	if response.MsgHdr.Rcode != dns.RcodeSuccess {
+		fmt.Printf("Error: %s response code: %s\n", zone, dns.RcodeToString[response.MsgHdr.Rcode])
+		os.Exit(1)
+	}
 	for _, rr := range response.Answer {
 		if rr.Header().Rrtype == dns.TypeNS {
 			nsNameList = append(nsNameList, rr.(*dns.NS).Ns)
 		}
+	}
+	if nsNameList == nil {
+		fmt.Printf("Error: %s no nameserver records found\n", zone)
+		os.Exit(1)
 	}
 
 	return nsNameList
