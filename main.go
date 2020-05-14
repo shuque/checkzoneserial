@@ -287,7 +287,6 @@ func doFlags() (string, Options) {
 	flag.BoolVar(&opts.noqueryns, "n", false, "don't query advertised nameservers")
 	flag.IntVar(&opts.delta, "d", defaultSerialDelta, "allowed serial number drift")
 	timeoutp := flag.Int("t", defaultTimeout, "query timeout in seconds")
-	opts.qopts.timeout = time.Second * time.Duration(*timeoutp)
 	flag.IntVar(&opts.qopts.retries, "r", defaultRetries, "number of query retries")
 
 	flag.Usage = func() {
@@ -307,6 +306,7 @@ func doFlags() (string, Options) {
 	}
 
 	flag.Parse()
+	opts.qopts.timeout = time.Second * time.Duration(*timeoutp)
 
 	if *help {
 		flag.Usage()
