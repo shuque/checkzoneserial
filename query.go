@@ -18,6 +18,7 @@ type QueryOptions struct {
 	cdflag  bool
 	timeout time.Duration
 	retries int
+	tcp     bool
 }
 
 //
@@ -33,12 +34,17 @@ func AddressString(addr string, port int) string {
 //
 // GetResolver - obtain (1st) system default resolver address
 //
-func GetResolver() (resolver net.IP, err error) {
+func GetResolver() (resolvers []net.IP, err error) {
+
 	config, err := dns.ClientConfigFromFile("/etc/resolv.conf")
-	if err == nil {
-		resolver = net.ParseIP(config.Servers[0])
+	if err != nil {
+		return nil, err
 	}
-	return resolver, err
+	for _, s := range config.Servers {
+		ip := net.ParseIP(s)
+		resolvers = append(resolvers, ip)
+	}
+	return resolvers, err
 }
 
 //
@@ -47,21 +53,9 @@ func GetResolver() (resolver net.IP, err error) {
 func MakeQuery(qname string, qtype uint16, qopts QueryOptions) *dns.Msg {
 	m := new(dns.Msg)
 	m.Id = dns.Id()
-	if qopts.rdflag {
-		m.RecursionDesired = true
-	} else {
-		m.RecursionDesired = false
-	}
-	if qopts.adflag {
-		m.AuthenticatedData = true
-	} else {
-		m.AuthenticatedData = false
-	}
-	if qopts.cdflag {
-		m.CheckingDisabled = true
-	} else {
-		m.CheckingDisabled = false
-	}
+	m.RecursionDesired = qopts.rdflag
+	m.AuthenticatedData = qopts.adflag
+	m.CheckingDisabled = qopts.cdflag
 	m.Question = make([]dns.Question, 1)
 	m.Question[0] = dns.Question{Name: qname, Qtype: qtype, Qclass: dns.ClassINET}
 	return m
@@ -70,11 +64,10 @@ func MakeQuery(qname string, qtype uint16, qopts QueryOptions) *dns.Msg {
 //
 // SendQueryUDP - send DNS query via UDP
 //
-func SendQueryUDP(qname string, qtype uint16, ipaddr net.IP, qopts QueryOptions) (response *dns.Msg, err error) {
+func SendQueryUDP(qname string, qtype uint16, ipaddrs []net.IP, qopts QueryOptions) (response *dns.Msg, err error) {
 
 	var retries = qopts.retries
 	var timeout = qopts.timeout
-	destination := AddressString(ipaddr.String(), 53)
 
 	m := MakeQuery(qname, qtype, qopts)
 
@@ -83,12 +76,15 @@ func SendQueryUDP(qname string, qtype uint16, ipaddr net.IP, qopts QueryOptions)
 	c.Timeout = timeout
 
 	for retries > 0 {
-		response, _, err = c.Exchange(m, destination)
-		if err == nil {
-			break
-		}
-		if nerr, ok := err.(net.Error); ok && !nerr.Timeout() {
-			break
+		for _, ipaddr := range ipaddrs {
+			destination := AddressString(ipaddr.String(), 53)
+			response, _, err = c.Exchange(m, destination)
+			if err == nil {
+				return response, err
+			}
+			if nerr, ok := err.(net.Error); ok && !nerr.Timeout() {
+				break
+			}
 		}
 		retries--
 	}
@@ -99,9 +95,7 @@ func SendQueryUDP(qname string, qtype uint16, ipaddr net.IP, qopts QueryOptions)
 //
 // SendQueryTCP - send DNS query via TCP
 //
-func SendQueryTCP(qname string, qtype uint16, ipaddr net.IP, qopts QueryOptions) (response *dns.Msg, err error) {
-
-	destination := AddressString(ipaddr.String(), 53)
+func SendQueryTCP(qname string, qtype uint16, ipaddrs []net.IP, qopts QueryOptions) (response *dns.Msg, err error) {
 
 	m := MakeQuery(qname, qtype, qopts)
 
@@ -109,20 +103,28 @@ func SendQueryTCP(qname string, qtype uint16, ipaddr net.IP, qopts QueryOptions)
 	c.Net = "tcp"
 	c.Timeout = qopts.timeout
 
-	response, _, err = c.Exchange(m, destination)
+	for _, ipaddr := range ipaddrs {
+		destination := AddressString(ipaddr.String(), 53)
+		response, _, err = c.Exchange(m, destination)
+		if err == nil {
+			return response, err
+		}
+	}
 	return response, err
-
 }
 
 //
 // SendQuery - send DNS query via UDP with fallback to TCP upon truncation
 //
-func SendQuery(qname string, qtype uint16, ipaddr net.IP, qopts QueryOptions) (response *dns.Msg, err error) {
+func SendQuery(qname string, qtype uint16, ipaddrs []net.IP, qopts QueryOptions) (*dns.Msg, error) {
 
-	response, err = SendQueryUDP(qname, qtype, ipaddr, qopts)
+	if qopts.tcp {
+		return SendQueryTCP(qname, qtype, ipaddrs, qopts)
+	}
 
+	response, err := SendQueryUDP(qname, qtype, ipaddrs, qopts)
 	if err == nil && response.MsgHdr.Truncated {
-		return SendQueryTCP(qname, qtype, ipaddr, qopts)
+		return SendQueryTCP(qname, qtype, ipaddrs, qopts)
 	}
 
 	return response, err

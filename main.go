@@ -14,6 +14,9 @@ import (
 	"github.com/miekg/dns"
 )
 
+// Version string
+var Version = "1.0.0"
+
 //
 // Options - query options
 //
@@ -21,7 +24,7 @@ type Options struct {
 	qopts        QueryOptions
 	useV6        bool
 	useV4        bool
-	resolver     net.IP
+	resolvers    []net.IP
 	masterIP     net.IP
 	masterName   string
 	additional   string
@@ -35,6 +38,11 @@ var (
 	defaultTimeout     = 3
 	defaultRetries     = 3
 	defaultSerialDelta = 0
+)
+
+// Globals
+var (
+	serialList []uint32
 )
 
 //
@@ -61,6 +69,20 @@ var numParallel uint16 = 20
 var tokens = make(chan struct{}, int(numParallel))
 var results = make(chan *Response)
 
+func minmax(a []uint32) (min uint32, max uint32) {
+	min = a[0]
+	max = a[0]
+	for _, value := range a {
+		if value < min {
+			min = value
+		}
+		if value > max {
+			max = value
+		}
+	}
+	return min, max
+}
+
 func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
 
 	var ipList []net.IP
@@ -69,7 +91,7 @@ func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
 
 	switch rrtype {
 	case dns.TypeAAAA, dns.TypeA:
-		response, err := SendQuery(hostname, rrtype, opts.resolver, opts.qopts)
+		response, err := SendQuery(hostname, rrtype, opts.resolvers, opts.qopts)
 		if err != nil || response == nil {
 			break
 		}
@@ -96,7 +118,7 @@ func getSerial(zone string, ip net.IP, opts Options) (serial uint32, err error) 
 
 	opts.qopts.rdflag = false
 
-	response, err = SendQuery(zone, dns.TypeSOA, ip, opts.qopts)
+	response, err = SendQuery(zone, dns.TypeSOA, []net.IP{ip}, opts.qopts)
 	if err != nil {
 		return serial, err
 	}
@@ -140,7 +162,7 @@ func getNSnames(zone string, opts Options) []string {
 	var nsNameList []string
 
 	opts.qopts.rdflag = true
-	response, err := SendQuery(zone, dns.TypeNS, opts.resolver, opts.qopts)
+	response, err := SendQuery(zone, dns.TypeNS, opts.resolvers, opts.qopts)
 	if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
@@ -213,7 +235,7 @@ func printMasterSerial(zone string, popts *Options) {
 		ipv4list := getIPAddresses(popts.masterName, dns.TypeA, *popts)
 		if ipv4list == nil {
 			fmt.Printf("Error: couldn't resolve master name: %s\n", popts.masterName)
-			os.Exit(1)
+			os.Exit(3)
 		}
 		popts.masterIP = ipv4list[0]
 	} else {
@@ -224,36 +246,28 @@ func printMasterSerial(zone string, popts *Options) {
 	if err == nil {
 		fmt.Printf("%15d [%9s] %s %s\n", popts.masterSerial, "MASTER",
 			popts.masterName, popts.masterIP)
+		serialList = append(serialList, popts.masterSerial)
 	} else {
 		fmt.Printf("Error: %s %s: couldn't obtain serial: %s\n",
 			popts.masterName, popts.masterIP, err.Error())
-		os.Exit(1)
+		os.Exit(3)
 	}
 
 }
 
-func printResult(r *Response, opts Options) bool {
+func printResult(r *Response, opts Options) {
 
 	if r.err == nil {
 		if opts.masterIP != nil {
 			delta := int(opts.masterSerial) - int(r.serial)
 			fmt.Printf("%15d [%9d] %s %s\n", r.serial, delta, r.nsname, r.nsip)
-			if delta < 0 {
-				delta = -delta
-			}
-			if delta > opts.delta {
-				return false
-			}
 		} else {
 			fmt.Printf("%15d %s %s\n", r.serial, r.nsname, r.nsip)
 		}
-		return true
+	} else {
+		fmt.Printf("Error: %s %s: couldn't obtain serial: %s\n",
+			r.nsname, r.nsip, r.err.Error())
 	}
-
-	fmt.Printf("Error: %s %s: couldn't obtain serial: %s\n",
-		r.nsname, r.nsip, r.err.Error())
-	return false
-
 }
 
 func getAdditionalServers(opts Options) []string {
@@ -282,6 +296,7 @@ func doFlags() (string, Options) {
 	help := flag.Bool("h", false, "print help string")
 	flag.BoolVar(&opts.useV6, "6", false, "use IPv6 only")
 	flag.BoolVar(&opts.useV4, "4", false, "use IPv4 only")
+	flag.BoolVar(&opts.qopts.tcp, "c", false, "use IPv4 only")
 	master := flag.String("m", "", "master server address")
 	flag.StringVar(&opts.additional, "a", "", "additional nameservers: n1,n2..")
 	flag.BoolVar(&opts.noqueryns, "n", false, "don't query advertised nameservers")
@@ -296,6 +311,7 @@ func doFlags() (string, Options) {
 	-h          Print this help string
 	-4          Use IPv4 transport only
 	-6          Use IPv6 transport only
+	-c          Use TCP for queries (default: UDP with TCP on truncation)
 	-t N        Query timeout value in seconds (default %d)
 	-r N        Maximum # SOA query retries for each server (default %d)
 	-d N        Allowed SOA serial number drift (default %d)
@@ -310,7 +326,7 @@ func doFlags() (string, Options) {
 
 	if *help {
 		flag.Usage()
-		os.Exit(1)
+		os.Exit(4)
 	}
 
 	if *master != "" {
@@ -323,7 +339,7 @@ func doFlags() (string, Options) {
 	if flag.NArg() != 1 {
 		fmt.Fprintf(os.Stderr, "Incorrect number of arguments.\n")
 		flag.Usage()
-		os.Exit(1)
+		os.Exit(4)
 	}
 	args := flag.Args()
 	return dns.Fqdn(args[0]), opts
@@ -337,7 +353,7 @@ func main() {
 
 	zone, opts := doFlags()
 
-	opts.resolver, err = GetResolver()
+	opts.resolvers, err = GetResolver()
 	if err != nil {
 		fmt.Printf("Error getting resolver: %s\n", err.Error())
 		os.Exit(1)
@@ -370,8 +386,18 @@ func main() {
 
 	rc := 0
 	for r := range results {
-		if !printResult(r, opts) {
+		printResult(r, opts)
+		if r.err != nil {
 			rc = 2
+		} else {
+			serialList = append(serialList, r.serial)
+		}
+	}
+
+	min, max := minmax(serialList)
+	if rc != 2 {
+		if (max - min) > uint32(opts.delta) {
+			rc = 1
 		}
 	}
 	os.Exit(rc)

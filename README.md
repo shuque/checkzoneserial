@@ -25,7 +25,7 @@ $ checkzoneserial -h
 Usage: checkzoneserial [Options] <zone>
 
 	Options:
-        -h          Print this help string
+	-h          Print this help string
 	-4          Use IPv4 transport only
 	-6          Use IPv6 transport only
 	-t N        Query timeout value in seconds (default 3)
@@ -40,8 +40,10 @@ Usage: checkzoneserial [Options] <zone>
 ### Return codes
 
 * 0 on success
-* 1 on program invocation error
-* 2 on detection of server issues (timeout, bad response, serial drift, etc)
+* 1 if serials are identical or do not differ by more than allowed drift
+* 2 on detection of server issues (timeout, bad response, etc)
+* 3 if the master server (if specified) fails to respond
+* 4 on program invocation error
 
 
 ### Example runs
@@ -61,6 +63,8 @@ Zone: upenn.edu.
      1007401858 adns2.upenn.edu. 2607:f470:1002::2:3
      1007401858 sns-pb.isc.org. 192.5.4.1
      1007401858 sns-pb.isc.org. 2001:500:2e::1
+$ echo $?
+0
 ```
 
 Report zone serials for siteforce.com servers, compare them to the
@@ -80,6 +84,8 @@ Zone: siteforce.com
      2019120536 [        2] udns3.salesforce.com. 156.154.102.8
      2019120538 [        0] udns4.salesforce.com. 2610:a1:1010::8
      2019120536 [        2] udns3.salesforce.com. 2610:a1:1009::8
+$ echo $?
+1
 ```
 
 The same as the last run, but only check the IPv6 addresses of the
