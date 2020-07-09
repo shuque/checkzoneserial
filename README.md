@@ -28,6 +28,7 @@ Usage: checkzoneserial [Options] <zone>
 	-h          Print this help string
 	-4          Use IPv4 transport only
 	-6          Use IPv6 transport only
+	-c          Use TCP for queries (default: UDP with TCP on truncation)
 	-t N        Query timeout value in seconds (default 3)
 	-r N        Maximum # SOA query retries for each server (default 3)
 	-d N        Allowed SOA serial number drift (default 0)
@@ -107,7 +108,7 @@ $ echo $?
 Report the serials of servers for zone appforce.com, compare them to
 the master 10.11.12.13, and allow a serial number difference (-d) of
 2. Since the serials of some servers were observed to differ by more
-than this value (3 is greater than 2), the exit code is 2.
+than this value (3 is greater than 2), the exit code is 1.
 
 ```
 $ checkzoneserial -m 10.11.12.13 -d 2 appforce.com
@@ -124,5 +125,5 @@ Zone: appforce.com.
      2001771861 [        1] udns4.salesforce.com. 2610:a1:1010::8
      2001771861 [        1] udns3.salesforce.com. 2610:a1:1009::8
 $ echo $?
-2
+1
 ```
