@@ -32,11 +32,15 @@ func AddressString(addr string, port int) string {
 }
 
 //
-// GetResolver - obtain (1st) system default resolver address
+// GetResolver - obtains system resolver addresses
 //
-func GetResolver() (resolvers []net.IP, err error) {
+func GetResolver(conffile string) (resolvers []net.IP, err error) {
 
-	config, err := dns.ClientConfigFromFile("/etc/resolv.conf")
+	if conffile == "" {
+		conffile = "/etc/resolv.conf"
+	}
+
+	config, err := dns.ClientConfigFromFile(conffile)
 	if err != nil {
 		return nil, err
 	}
@@ -67,13 +71,11 @@ func MakeQuery(qname string, qtype uint16, qopts QueryOptions) *dns.Msg {
 func SendQueryUDP(qname string, qtype uint16, ipaddrs []net.IP, qopts QueryOptions) (response *dns.Msg, err error) {
 
 	var retries = qopts.retries
-	var timeout = qopts.timeout
 
 	m := MakeQuery(qname, qtype, qopts)
-
 	c := new(dns.Client)
 	c.Net = "udp"
-	c.Timeout = timeout
+	c.Timeout = qopts.timeout
 
 	for retries > 0 {
 		for _, ipaddr := range ipaddrs {

@@ -14,8 +14,9 @@ import (
 	"github.com/miekg/dns"
 )
 
-// Version string
-var Version = "1.0.0"
+// Version and Program name strings
+var Version = "1.0.1"
+var progname = path.Base(os.Args[0])
 
 //
 // Options - query options
@@ -24,6 +25,7 @@ type Options struct {
 	qopts        QueryOptions
 	useV6        bool
 	useV4        bool
+	resolvconf   string
 	resolvers    []net.IP
 	masterIP     net.IP
 	masterName   string
@@ -297,6 +299,7 @@ func doFlags() (string, Options) {
 	flag.BoolVar(&opts.useV6, "6", false, "use IPv6 only")
 	flag.BoolVar(&opts.useV4, "4", false, "use IPv4 only")
 	flag.BoolVar(&opts.qopts.tcp, "c", false, "use IPv4 only")
+	flag.StringVar(&opts.resolvconf, "cf", "", "use alternate resolv.conf file")
 	master := flag.String("m", "", "master server address")
 	flag.StringVar(&opts.additional, "a", "", "additional nameservers: n1,n2..")
 	flag.BoolVar(&opts.noqueryns, "n", false, "don't query advertised nameservers")
@@ -305,12 +308,14 @@ func doFlags() (string, Options) {
 	flag.IntVar(&opts.qopts.retries, "r", defaultRetries, "number of query retries")
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, `Usage: %s [Options] <zone>
+		fmt.Fprintf(os.Stderr, `%s, version %s
+Usage: %s [Options] <zone>
 
 	Options:
 	-h          Print this help string
 	-4          Use IPv4 transport only
 	-6          Use IPv6 transport only
+	-cf file    Use alternate resolv.conf file
 	-c          Use TCP for queries (default: UDP with TCP on truncation)
 	-t N        Query timeout value in seconds (default %d)
 	-r N        Maximum # SOA query retries for each server (default %d)
@@ -318,7 +323,7 @@ func doFlags() (string, Options) {
 	-m ns       Master server name/address to compare serial numbers with
 	-a ns1,..   Specify additional nameserver names/addresses to query
 	-n          Don't query advertised nameservers for the zone
-`, path.Base(os.Args[0]), defaultTimeout, defaultRetries, defaultSerialDelta)
+`, progname, Version, progname, defaultTimeout, defaultRetries, defaultSerialDelta)
 	}
 
 	flag.Parse()
@@ -334,6 +339,12 @@ func doFlags() (string, Options) {
 		if opts.masterIP == nil { // assume hostname
 			opts.masterName = dns.Fqdn(*master)
 		}
+	}
+
+	if opts.useV4 && opts.useV6 {
+		fmt.Fprintf(os.Stderr, "Cannot specify both -4 and -6.\n")
+		flag.Usage()
+		os.Exit(4)
 	}
 
 	if flag.NArg() != 1 {
@@ -353,7 +364,7 @@ func main() {
 
 	zone, opts := doFlags()
 
-	opts.resolvers, err = GetResolver()
+	opts.resolvers, err = GetResolver(opts.resolvconf)
 	if err != nil {
 		fmt.Printf("Error getting resolver: %s\n", err.Error())
 		os.Exit(1)
@@ -394,8 +405,13 @@ func main() {
 		}
 	}
 
-	min, max := minmax(serialList)
+	if serialList == nil {
+		fmt.Printf("ERROR: no SOA serials obtained.\n")
+		os.Exit(2)
+	}
+
 	if rc != 2 {
+		min, max := minmax(serialList)
 		if (max - min) > uint32(opts.delta) {
 			rc = 1
 		}

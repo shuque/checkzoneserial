@@ -22,20 +22,21 @@ Just run 'go build'. This will generate the executable 'checkzoneserial'.
 
 ```
 $ checkzoneserial -h
+checkzoneserial, version 1.0.1
 Usage: checkzoneserial [Options] <zone>
 
-	Options:
-	-h          Print this help string
-	-4          Use IPv4 transport only
-	-6          Use IPv6 transport only
-	-c          Use TCP for queries (default: UDP with TCP on truncation)
-	-t N        Query timeout value in seconds (default 3)
-	-r N        Maximum # SOA query retries for each server (default 3)
-	-d N        Allowed SOA serial number drift (default 0)
-	-m ns       Master server name/address to compare serial numbers with
-	-a ns1,..   Specify additional nameserver names/addresses to query
-	-n          Don't query advertised nameservers for the zone
-
+        Options:
+        -h          Print this help string
+        -4          Use IPv4 transport only
+        -6          Use IPv6 transport only
+        -cf file    Use alternate resolv.conf file
+        -c          Use TCP for queries (default: UDP with TCP on truncation)
+        -t N        Query timeout value in seconds (default 3)
+        -r N        Maximum # SOA query retries for each server (default 3)
+        -d N        Allowed SOA serial number drift (default 0)
+        -m ns       Master server name/address to compare serial numbers with
+        -a ns1,..   Specify additional nameserver names/addresses to query
+        -n          Don't query advertised nameservers for the zone
 ```
 
 ### Return codes
