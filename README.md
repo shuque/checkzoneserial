@@ -42,7 +42,7 @@ Usage: checkzoneserial [Options] <zone>
 ### Return codes
 
 * 0 on success
-* 1 if serials are identical or do not differ by more than allowed drift
+* 1 if serials aren't identical or differ by more than allowed drift
 * 2 on detection of server issues (timeout, bad response, etc)
 * 3 if the master server (if specified) fails to respond
 * 4 on program invocation error
