@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"net"
 	"os"
@@ -15,32 +14,8 @@ import (
 )
 
 // Version and Program name strings
-var Version = "1.0.1"
+var Version = "1.0.2"
 var progname = path.Base(os.Args[0])
-
-//
-// Options - query options
-//
-type Options struct {
-	qopts        QueryOptions
-	useV6        bool
-	useV4        bool
-	resolvconf   string
-	resolvers    []net.IP
-	masterIP     net.IP
-	masterName   string
-	additional   string
-	noqueryns    bool
-	masterSerial uint32
-	delta        int
-}
-
-// Defaults
-var (
-	defaultTimeout     = 3
-	defaultRetries     = 3
-	defaultSerialDelta = 0
-)
 
 // Globals
 var (
@@ -62,8 +37,14 @@ type Response struct {
 	nsname string
 	nsip   net.IP
 	serial uint32
+	took   time.Duration
 	err    error
 }
+
+//
+// map of Responses keyed by nameserver domain name
+//
+var ResponseByName = make(map[string][]Response)
 
 // For goroutine communications and synchronization
 var wg sync.WaitGroup
@@ -114,33 +95,36 @@ func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
 
 }
 
-func getSerial(zone string, ip net.IP, opts Options) (serial uint32, err error) {
+func getSerial(zone string, ip net.IP, opts Options) (serial uint32, took time.Duration, err error) {
 
 	var response *dns.Msg
 
 	opts.qopts.rdflag = false
 
+	t0 := time.Now()
 	response, err = SendQuery(zone, dns.TypeSOA, []net.IP{ip}, opts.qopts)
+	took = time.Since(t0)
+
 	if err != nil {
-		return serial, err
+		return serial, took, err
 	}
 	switch response.MsgHdr.Rcode {
 	case dns.RcodeSuccess:
 		break
 	case dns.RcodeNameError:
-		return serial, fmt.Errorf("NXDOMAIN: %s: name doesn't exist", zone)
+		return serial, took, fmt.Errorf("NXDOMAIN: %s: name doesn't exist", zone)
 	default:
-		return serial, fmt.Errorf("Error: Response code: %s",
+		return serial, took, fmt.Errorf("response code: %s",
 			dns.RcodeToString[response.MsgHdr.Rcode])
 	}
 
 	for _, rr := range response.Answer {
 		if rr.Header().Rrtype == dns.TypeSOA {
-			return rr.(*dns.SOA).Serial, nil
+			return rr.(*dns.SOA).Serial, took, nil
 		}
 	}
 
-	return serial, fmt.Errorf("SOA record not found at %s",
+	return serial, took, fmt.Errorf("SOA record not found at %s",
 		ip.String())
 }
 
@@ -148,13 +132,14 @@ func getSerialAsync(zone string, ip net.IP, nsName string, opts Options) {
 
 	defer wg.Done()
 
-	serial, err := getSerial(zone, ip, opts)
+	serial, took, err := getSerial(zone, ip, opts)
 	<-tokens // Release token
 
 	r := new(Response)
 	r.nsip = ip
 	r.nsname = nsName
 	r.serial = serial
+	r.took = took
 	r.err = err
 	results <- r
 }
@@ -229,9 +214,14 @@ func getRequests(nsNameList []string, opts Options) []*Request {
 
 }
 
+func tookMilliSeconds(took time.Duration) float32 {
+	return float32(took.Microseconds()) / 1000.0
+}
+
 func printMasterSerial(zone string, popts *Options) {
 
 	var err error
+	var took time.Duration
 
 	if popts.masterIP == nil {
 		ipv4list := getIPAddresses(popts.masterName, dns.TypeA, *popts)
@@ -244,10 +234,10 @@ func printMasterSerial(zone string, popts *Options) {
 		popts.masterName = popts.masterIP.String()
 	}
 
-	popts.masterSerial, err = getSerial(zone, popts.masterIP, *popts)
+	popts.masterSerial, took, err = getSerial(zone, popts.masterIP, *popts)
 	if err == nil {
-		fmt.Printf("%15d [%9s] %s %s\n", popts.masterSerial, "MASTER",
-			popts.masterName, popts.masterIP)
+		fmt.Printf("%15d [%8s] %s %s %.2fms\n", popts.masterSerial, "MASTER",
+			popts.masterName, popts.masterIP, tookMilliSeconds(took))
 		serialList = append(serialList, popts.masterSerial)
 	} else {
 		fmt.Printf("Error: %s %s: couldn't obtain serial: %s\n",
@@ -262,9 +252,9 @@ func printResult(r *Response, opts Options) {
 	if r.err == nil {
 		if opts.masterIP != nil {
 			delta := int(opts.masterSerial) - int(r.serial)
-			fmt.Printf("%15d [%9d] %s %s\n", r.serial, delta, r.nsname, r.nsip)
+			fmt.Printf("%15d [%8d] %s %s %.2fms\n", r.serial, delta, r.nsname, r.nsip, tookMilliSeconds(r.took))
 		} else {
-			fmt.Printf("%15d %s %s\n", r.serial, r.nsname, r.nsip)
+			fmt.Printf("%15d %s %s %.2fms\n", r.serial, r.nsname, r.nsip, tookMilliSeconds(r.took))
 		}
 	} else {
 		fmt.Printf("Error: %s %s: couldn't obtain serial: %s\n",
@@ -291,74 +281,10 @@ func getAdditionalServers(opts Options) []string {
 	return s
 }
 
-func doFlags() (string, Options) {
-
-	var opts Options
-
-	help := flag.Bool("h", false, "print help string")
-	flag.BoolVar(&opts.useV6, "6", false, "use IPv6 only")
-	flag.BoolVar(&opts.useV4, "4", false, "use IPv4 only")
-	flag.BoolVar(&opts.qopts.tcp, "c", false, "use IPv4 only")
-	flag.StringVar(&opts.resolvconf, "cf", "", "use alternate resolv.conf file")
-	master := flag.String("m", "", "master server address")
-	flag.StringVar(&opts.additional, "a", "", "additional nameservers: n1,n2..")
-	flag.BoolVar(&opts.noqueryns, "n", false, "don't query advertised nameservers")
-	flag.IntVar(&opts.delta, "d", defaultSerialDelta, "allowed serial number drift")
-	timeoutp := flag.Int("t", defaultTimeout, "query timeout in seconds")
-	flag.IntVar(&opts.qopts.retries, "r", defaultRetries, "number of query retries")
-
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, `%s, version %s
-Usage: %s [Options] <zone>
-
-	Options:
-	-h          Print this help string
-	-4          Use IPv4 transport only
-	-6          Use IPv6 transport only
-	-cf file    Use alternate resolv.conf file
-	-c          Use TCP for queries (default: UDP with TCP on truncation)
-	-t N        Query timeout value in seconds (default %d)
-	-r N        Maximum # SOA query retries for each server (default %d)
-	-d N        Allowed SOA serial number drift (default %d)
-	-m ns       Master server name/address to compare serial numbers with
-	-a ns1,..   Specify additional nameserver names/addresses to query
-	-n          Don't query advertised nameservers for the zone
-`, progname, Version, progname, defaultTimeout, defaultRetries, defaultSerialDelta)
-	}
-
-	flag.Parse()
-	opts.qopts.timeout = time.Second * time.Duration(*timeoutp)
-
-	if *help {
-		flag.Usage()
-		os.Exit(4)
-	}
-
-	if *master != "" {
-		opts.masterIP = net.ParseIP(*master)
-		if opts.masterIP == nil { // assume hostname
-			opts.masterName = dns.Fqdn(*master)
-		}
-	}
-
-	if opts.useV4 && opts.useV6 {
-		fmt.Fprintf(os.Stderr, "Cannot specify both -4 and -6.\n")
-		flag.Usage()
-		os.Exit(4)
-	}
-
-	if flag.NArg() != 1 {
-		fmt.Fprintf(os.Stderr, "Incorrect number of arguments.\n")
-		flag.Usage()
-		os.Exit(4)
-	}
-	args := flag.Args()
-	return dns.Fqdn(args[0]), opts
-}
-
 func main() {
 
 	var err error
+	var rc int
 	var nsNameList []string
 	var requests []*Request
 
@@ -380,7 +306,8 @@ func main() {
 
 	opts.qopts.rdflag = false
 
-	fmt.Printf("Zone: %s\n", zone)
+	fmt.Printf("## Zone: %s\n", zone)
+	fmt.Println("## Time:", time.Now())
 	if opts.masterIP != nil || opts.masterName != "" {
 		printMasterSerial(zone, &opts)
 	}
@@ -395,13 +322,31 @@ func main() {
 		close(results)
 	}()
 
-	rc := 0
 	for r := range results {
-		printResult(r, opts)
+		ResponseByName[r.nsname] = append(ResponseByName[r.nsname], *r)
+		if !opts.sortresponse {
+			printResult(r, opts)
+		}
 		if r.err != nil {
 			rc = 2
 		} else {
 			serialList = append(serialList, r.serial)
+		}
+	}
+
+	if opts.sortresponse {
+		nsname_list := make([]string, 0, len(ResponseByName))
+
+		for k := range ResponseByName {
+			nsname_list = append(nsname_list, k)
+		}
+		sort.Sort(ByCanonicalOrder(nsname_list))
+		for _, nsname := range nsname_list {
+			responses := ResponseByName[nsname]
+			sort.Sort(ByIPversion(responses))
+			for _, r := range responses {
+				printResult(&r, opts)
+			}
 		}
 	}
 

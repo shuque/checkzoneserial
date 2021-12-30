@@ -25,7 +25,7 @@ type QueryOptions struct {
 // AddressString - compose address string for net functions
 //
 func AddressString(addr string, port int) string {
-	if strings.Index(addr, ":") == -1 {
+	if !strings.Contains(addr, ":") {
 		return addr + ":" + strconv.Itoa(port)
 	}
 	return "[" + addr + "]" + ":" + strconv.Itoa(port)
