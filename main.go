@@ -307,7 +307,7 @@ func main() {
 	opts.qopts.rdflag = false
 
 	fmt.Printf("## Zone: %s\n", zone)
-	fmt.Println("## Time:", time.Now())
+	fmt.Println("## Time:", time.Now().Format("2006-01-02T15:04:05MST"))
 	if opts.masterIP != nil || opts.masterName != "" {
 		printMasterSerial(zone, &opts)
 	}
