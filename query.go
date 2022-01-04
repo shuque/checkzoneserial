@@ -68,11 +68,10 @@ func MakeQuery(qname string, qtype uint16, qopts QueryOptions) *dns.Msg {
 //
 // SendQueryUDP - send DNS query via UDP
 //
-func SendQueryUDP(qname string, qtype uint16, ipaddrs []net.IP, qopts QueryOptions) (response *dns.Msg, err error) {
+func SendQueryUDP(query *dns.Msg, ipaddrs []net.IP, qopts QueryOptions) (response *dns.Msg, err error) {
 
 	var retries = qopts.retries
 
-	m := MakeQuery(qname, qtype, qopts)
 	c := new(dns.Client)
 	c.Net = "udp"
 	c.Timeout = qopts.timeout
@@ -80,7 +79,7 @@ func SendQueryUDP(qname string, qtype uint16, ipaddrs []net.IP, qopts QueryOptio
 	for retries > 0 {
 		for _, ipaddr := range ipaddrs {
 			destination := AddressString(ipaddr.String(), 53)
-			response, _, err = c.Exchange(m, destination)
+			response, _, err = c.Exchange(query, destination)
 			if err == nil {
 				return response, err
 			}
@@ -97,9 +96,7 @@ func SendQueryUDP(qname string, qtype uint16, ipaddrs []net.IP, qopts QueryOptio
 //
 // SendQueryTCP - send DNS query via TCP
 //
-func SendQueryTCP(qname string, qtype uint16, ipaddrs []net.IP, qopts QueryOptions) (response *dns.Msg, err error) {
-
-	m := MakeQuery(qname, qtype, qopts)
+func SendQueryTCP(query *dns.Msg, ipaddrs []net.IP, qopts QueryOptions) (response *dns.Msg, err error) {
 
 	c := new(dns.Client)
 	c.Net = "tcp"
@@ -107,7 +104,7 @@ func SendQueryTCP(qname string, qtype uint16, ipaddrs []net.IP, qopts QueryOptio
 
 	for _, ipaddr := range ipaddrs {
 		destination := AddressString(ipaddr.String(), 53)
-		response, _, err = c.Exchange(m, destination)
+		response, _, err = c.Exchange(query, destination)
 		if err == nil {
 			return response, err
 		}
@@ -120,13 +117,15 @@ func SendQueryTCP(qname string, qtype uint16, ipaddrs []net.IP, qopts QueryOptio
 //
 func SendQuery(qname string, qtype uint16, ipaddrs []net.IP, qopts QueryOptions) (*dns.Msg, error) {
 
+	query := MakeQuery(qname, qtype, qopts)
+
 	if qopts.tcp {
-		return SendQueryTCP(qname, qtype, ipaddrs, qopts)
+		return SendQueryTCP(query, ipaddrs, qopts)
 	}
 
-	response, err := SendQueryUDP(qname, qtype, ipaddrs, qopts)
+	response, err := SendQueryUDP(query, ipaddrs, qopts)
 	if err == nil && response.MsgHdr.Truncated {
-		return SendQueryTCP(qname, qtype, ipaddrs, qopts)
+		return SendQueryTCP(query, ipaddrs, qopts)
 	}
 
 	return response, err
