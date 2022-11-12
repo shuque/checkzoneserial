@@ -236,7 +236,7 @@ func printMasterSerial(zone string, popts *Options) {
 
 	popts.masterSerial, took, err = getSerial(zone, popts.masterIP, *popts)
 	if err == nil {
-		fmt.Printf("%15d [%8s] %s %s %.2fms\n", popts.masterSerial, "MASTER",
+		fmt.Printf("%15d [%8s] %s %s %.2fms\n", popts.masterSerial, "PRIMARY",
 			popts.masterName, popts.masterIP, tookMilliSeconds(took))
 		serialList = append(serialList, popts.masterSerial)
 	} else {
