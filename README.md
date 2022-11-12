@@ -3,11 +3,11 @@ Check zone serial numbers across servers
 
 This program queries a zone's SOA record at all its authoritative
 servers simultaneously and reports the serial number seen and the response
-times. If a master server is specified (with the -m option) it will also
-compute the difference in the serial numbers seen with the master serial
+times. If a primary server is specified (with the -m option) it will also
+compute the difference in the serial numbers seen with the primary serial
 number.
 
-The master, if provided, is queried first. Then all the authoritative
+The primary, if provided, is queried first. Then all the authoritative
 servers are queried in parallel.
 
 ### Pre-requisites
@@ -36,7 +36,7 @@ Usage: checkzoneserial [Options] <zone>
         -t N        Query timeout value in seconds (default 3)
         -r N        Maximum # SOA query retries for each server (default 3)
         -d N        Allowed SOA serial number drift (default 0)
-        -m ns       Master server name/address to compare serial numbers with
+        -m ns       Primary server name/address to compare serial numbers with
         -a ns1,..   Specify additional nameserver names/addresses to query
         -n          Don't query advertised nameservers for the zone
 ```
@@ -46,7 +46,7 @@ Usage: checkzoneserial [Options] <zone>
 * 0 on success
 * 1 if serials aren't identical or differ by more than allowed drift
 * 2 on detection of server issues (timeout, bad response, etc)
-* 3 if the master server (if specified) fails to respond
+* 3 if the primary server (if specified) fails to respond
 * 4 on program invocation error
 
 
@@ -73,13 +73,13 @@ $ echo $?
 ```
 
 Report zone serials for siteforce.com servers, compare them to the
-master server 10.11.12.13 (-m option) and report the deltas.
+primary server 10.11.12.13 (-m option) and report the deltas.
 
 ```
 $ checkzoneserial -m 10.11.12.13 siteforce.com
 ## Zone: siteforce.com
 ## Time: 2021-12-30 19:00:39.503772028 -0500 EST m=+0.003235641
-     2019120538 [  MASTER] 10.11.12.13 10.11.12.13 0.41ms
+     2019120538 [ PRIMARY] 10.11.12.13 10.11.12.13 0.41ms
      2019120538 [       0] udns1.salesforce.com. 2001:502:2eda::8 5.43ms
      2019120537 [       1] pch1.salesforce-dns.com. 206.223.122.1 6.71ms
      2019120538 [       0] pch1.salesforce-dns.com. 2620:171:809::1 7.12ms
@@ -101,7 +101,7 @@ servers. Since all the serials are the same, the exit code is 0.
 $ checkzoneserial -m 10.11.12.13 -6 siteforce.com
 ## Zone: siteforce.com
 ## Time: 2021-12-30 19:00:39.503772028 -0500 EST m=+0.003235641
-     2019120538 [  MASTER] 10.11.12.13 10.11.12.13 0.54ms
+     2019120538 [ PRIMARY] 10.11.12.13 10.11.12.13 0.54ms
      2019120538 [       0] pch1.salesforce-dns.com. 2620:171:809::1 7.12ms
      2019120538 [       0] udns1.salesforce.com. 2001:502:2eda::8 6.43ms
      2019120538 [       0] udns2.salesforce.com. 2001:502:ad09::8 7.77ms
@@ -112,7 +112,7 @@ $ echo $?
 ```
 
 Report the serials of servers for zone appforce.com, compare them to
-the master 10.11.12.13, and allow a serial number difference (-d) of
+the primary 10.11.12.13, and allow a serial number difference (-d) of
 2. Since the serials of some servers were observed to differ by more
 than this value (3 is greater than 2), the exit code is 1.
 
@@ -120,7 +120,7 @@ than this value (3 is greater than 2), the exit code is 1.
 $ checkzoneserial -m 10.11.12.13 -d 2 appforce.com
 ## Zone: appforce.com.
 ## Time: 2021-12-30 19:00:39.503772028 -0500 EST m=+0.003235641
-     2001771862 [  MASTER]  10.11.12.13 10.11.12.13 0.87ms
+     2001771862 [ PRIMARY]  10.11.12.13 10.11.12.13 0.87ms
      2001771861 [       1] pch1.salesforce-dns.com. 2620:171:809::1 4.23ms
      2001771861 [       1] pch1.salesforce-dns.com. 206.223.122.1 4.54ms
      2001771859 [       3] udns2.salesforce.com. 2001:502:ad09::8 5.56ms
