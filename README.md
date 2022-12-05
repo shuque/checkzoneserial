@@ -23,7 +23,7 @@ Just run 'go build'. This will generate the executable 'checkzoneserial'.
 
 ```
 $ checkzoneserial -h
-checkzoneserial, version 1.0.2
+checkzoneserial, version 1.0.3
 Usage: checkzoneserial [Options] <zone>
 
         Options:
@@ -56,8 +56,7 @@ Report zone serials for all authoritative servers for upenn.edu:
 
 ```
 $ checkzoneserial upenn.edu
-## Zone: upenn.edu.
-## Time: 2021-10-30 19:00:39.503772028 -0500 EST m=+0.003235641
+## upenn.edu. 2022-12-05T17:57:40EST
      1007401858 adns3.upenn.edu. 128.91.251.33 7.12ms
      1007401858 adns1.upenn.edu. 128.91.3.128 5.31ms
      1007401858 dns1.udel.edu. 128.175.13.16 12.64ms
@@ -77,8 +76,7 @@ master server 10.11.12.13 (-m option) and report the deltas.
 
 ```
 $ checkzoneserial -m 10.11.12.13 siteforce.com
-## Zone: siteforce.com
-## Time: 2021-12-30 19:00:39.503772028 -0500 EST m=+0.003235641
+## siteforce.com. 2022-12-05T17:57:40EST
      2019120538 [  MASTER] 10.11.12.13 10.11.12.13 0.41ms
      2019120538 [       0] udns1.salesforce.com. 2001:502:2eda::8 5.43ms
      2019120537 [       1] pch1.salesforce-dns.com. 206.223.122.1 6.71ms
@@ -99,8 +97,7 @@ servers. Since all the serials are the same, the exit code is 0.
 
 ```
 $ checkzoneserial -m 10.11.12.13 -6 siteforce.com
-## Zone: siteforce.com
-## Time: 2021-12-30 19:00:39.503772028 -0500 EST m=+0.003235641
+## siteforce.com. 2022-12-05T17:57:40EST
      2019120538 [  MASTER] 10.11.12.13 10.11.12.13 0.54ms
      2019120538 [       0] pch1.salesforce-dns.com. 2620:171:809::1 7.12ms
      2019120538 [       0] udns1.salesforce.com. 2001:502:2eda::8 6.43ms
@@ -118,8 +115,7 @@ than this value (3 is greater than 2), the exit code is 1.
 
 ```
 $ checkzoneserial -m 10.11.12.13 -d 2 appforce.com
-## Zone: appforce.com.
-## Time: 2021-12-30 19:00:39.503772028 -0500 EST m=+0.003235641
+## appforce.com. 2022-12-05T17:57:40EST
      2001771862 [  MASTER]  10.11.12.13 10.11.12.13 0.87ms
      2001771861 [       1] pch1.salesforce-dns.com. 2620:171:809::1 4.23ms
      2001771861 [       1] pch1.salesforce-dns.com. 206.223.122.1 4.54ms

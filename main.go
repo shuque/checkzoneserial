@@ -14,7 +14,7 @@ import (
 )
 
 // Version and Program name strings
-var Version = "1.0.2"
+var Version = "1.0.3"
 var progname = path.Base(os.Args[0])
 
 // Globals
@@ -306,8 +306,7 @@ func main() {
 
 	opts.qopts.rdflag = false
 
-	fmt.Printf("## Zone: %s\n", zone)
-	fmt.Println("## Time:", time.Now().Format("2006-01-02T15:04:05MST"))
+	fmt.Printf("## %s %s\n", zone, time.Now().Format("2006-01-02T15:04:05MST"))
 	if opts.masterIP != nil || opts.masterName != "" {
 		printMasterSerial(zone, &opts)
 	}
