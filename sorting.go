@@ -4,11 +4,9 @@ import (
 	"github.com/miekg/dns"
 )
 
-//
 // CanonicalDomainOrder compares 2 domain name strings in DNS canonical order,
 // and returns -1, 0, or 1, according to whether the first string sorts earlier
 // than, equal to, or later than the second string.
-//
 func CanonicalDomainOrder(d1, d2 string) int {
 
 	name1, name2 := dns.CanonicalName(dns.Fqdn(d1)), dns.CanonicalName(dns.Fqdn(d2))
@@ -54,9 +52,7 @@ func (s ByCanonicalOrder) Less(i, j int) bool {
 	return CanonicalDomainOrder(s[i], s[j]) == -1
 }
 
-//
 // To sort Response lists by version (IPv6 first)
-//
 type ByIPversion []Response
 
 func (s ByIPversion) Len() int {
@@ -66,5 +62,5 @@ func (s ByIPversion) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 func (s ByIPversion) Less(i, j int) bool {
-	return s[i].nsip.To4() == nil
+	return s[i].ip.To4() == nil
 }

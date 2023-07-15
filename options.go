@@ -10,14 +10,13 @@ import (
 	"github.com/miekg/dns"
 )
 
-//
 // Options - query options
-//
 type Options struct {
 	qopts        QueryOptions
 	useV6        bool
 	useV4        bool
 	sortresponse bool
+	json         bool
 	resolvconf   string
 	resolvers    []net.IP
 	masterIP     net.IP
@@ -43,6 +42,7 @@ func doFlags() (string, Options) {
 	flag.BoolVar(&opts.useV6, "6", false, "use IPv6 only")
 	flag.BoolVar(&opts.useV4, "4", false, "use IPv4 only")
 	flag.BoolVar(&opts.sortresponse, "s", false, "sort responses")
+	flag.BoolVar(&opts.json, "j", false, "output json")
 	flag.BoolVar(&opts.qopts.tcp, "c", false, "use IPv4 only")
 	flag.StringVar(&opts.resolvconf, "cf", "", "use alternate resolv.conf file")
 	master := flag.String("m", "", "master server address")
@@ -62,6 +62,7 @@ Usage: %s [Options] <zone>
 	-6          Use IPv6 transport only
 	-cf file    Use alternate resolv.conf file
 	-s          Print responses sorted by domain name and IP version
+	-j          Produce json formatted output (implies -s)
 	-c          Use TCP for queries (default: UDP with TCP on truncation)
 	-t N        Query timeout value in seconds (default %d)
 	-r N        Maximum # SOA query retries for each server (default %d)

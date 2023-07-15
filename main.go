@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"path"
@@ -14,43 +16,71 @@ import (
 )
 
 // Version and Program name strings
-var Version = "1.0.3"
+var Version = "1.1.0"
 var progname = path.Base(os.Args[0])
 
-// Globals
-var (
-	serialList []uint32
-)
+// Status codes
+var StatusCode = map[int]string{
+	0: "",
+	1: "serial mismatch or exceeds drift",
+	2: "server issues",
+	3: "master server error",
+	4: "program invocation error",
+}
 
-//
 // Request - request parameters
-//
 type Request struct {
 	nsname string
 	nsip   net.IP
 }
 
-//
-// Response - response information
-//
+// Response
 type Response struct {
-	nsname string
-	nsip   net.IP
-	serial uint32
-	took   time.Duration
-	err    error
+	Nsname   string `json:"name"`
+	ip       net.IP
+	Nsip     string `json:"ip"`
+	Serial   uint32 `json:"serial"`
+	Delta    *int   `json:"delta,omitempty"`
+	resptime time.Duration
+	Resptime float64 `json:"resptime"`
+	err      error
+	Err      string `json:"error,omitempty"`
 }
 
-//
-// map of Responses keyed by nameserver domain name
-//
-var ResponseByName = make(map[string][]Response)
+// Master Server
+type Master struct {
+	Name     string  `json:"name"`
+	IP       string  `json:"ip"`
+	Serial   uint32  `json:"serial"`
+	Resptime float64 `json:"resptime"`
+	Err      string  `json:"error,omitempty"`
+}
+
+// Output
+type Output struct {
+	Status    int        `json:"status"`
+	Error     string     `json:"error,omitempty"`
+	Zone      string     `json:"zone"`
+	Timestamp string     `json:"timestamp"`
+	Master    *Master    `json:"master"`
+	Responses []Response `json:"responses"`
+}
 
 // For goroutine communications and synchronization
-var wg sync.WaitGroup
-var numParallel uint16 = 20
-var tokens = make(chan struct{}, int(numParallel))
-var results = make(chan *Response)
+var (
+	wg          sync.WaitGroup
+	numParallel uint16 = 20
+	tokens             = make(chan struct{}, int(numParallel))
+	results            = make(chan *Response)
+)
+
+// Other globals
+var (
+	output     Output
+	serialList []uint32
+	// map of Responses keyed by nameserver domain name
+	ResponseByName = make(map[string][]Response)
+)
 
 func minmax(a []uint32) (min uint32, max uint32) {
 	min = a[0]
@@ -132,15 +162,24 @@ func getSerialAsync(zone string, ip net.IP, nsName string, opts Options) {
 
 	defer wg.Done()
 
-	serial, took, err := getSerial(zone, ip, opts)
+	serial, resptime, err := getSerial(zone, ip, opts)
 	<-tokens // Release token
 
 	r := new(Response)
-	r.nsip = ip
-	r.nsname = nsName
-	r.serial = serial
-	r.took = took
+	r.ip = ip
+	r.Nsip = ip.String()
+	r.Nsname = nsName
+	r.Serial = serial
+	r.resptime = resptime
+	r.Resptime = resptime.Seconds() * 1000.0
+	if opts.masterIP != nil {
+		delta := int(opts.masterSerial) - int(serial)
+		r.Delta = &delta
+	}
 	r.err = err
+	if err != nil {
+		r.Err = err.Error()
+	}
 	results <- r
 }
 
@@ -151,16 +190,17 @@ func getNSnames(zone string, opts Options) []string {
 	opts.qopts.rdflag = true
 	response, err := SendQuery(zone, dns.TypeNS, opts.resolvers, opts.qopts)
 	if err != nil {
-		fmt.Println(err.Error())
-		os.Exit(1)
+		bailout(1, err.Error(), opts)
 	}
 	if response.MsgHdr.Rcode == dns.RcodeNameError {
-		fmt.Printf("Error: %s doesn't exist\n", zone)
-		os.Exit(1)
+		bailout(1,
+			fmt.Sprintf("%s doesn't exist", zone),
+			opts)
 	}
 	if response.MsgHdr.Rcode != dns.RcodeSuccess {
-		fmt.Printf("Error: %s response code: %s\n", zone, dns.RcodeToString[response.MsgHdr.Rcode])
-		os.Exit(1)
+		bailout(1,
+			fmt.Sprintf("%s response code: %s", zone, dns.RcodeToString[response.MsgHdr.Rcode]),
+			opts)
 	}
 	for _, rr := range response.Answer {
 		if rr.Header().Rrtype == dns.TypeNS {
@@ -168,8 +208,9 @@ func getNSnames(zone string, opts Options) []string {
 		}
 	}
 	if nsNameList == nil {
-		fmt.Printf("Error: %s no nameserver records found\n", zone)
-		os.Exit(1)
+		bailout(1,
+			fmt.Sprintf("%s no nameserver records found", zone),
+			opts)
 	}
 
 	return nsNameList
@@ -214,52 +255,63 @@ func getRequests(nsNameList []string, opts Options) []*Request {
 
 }
 
-func tookMilliSeconds(took time.Duration) float32 {
-	return float32(took.Microseconds()) / 1000.0
+func MilliSeconds(duration time.Duration) float32 {
+	return float32(duration.Microseconds()) / 1000.0
 }
 
-func printMasterSerial(zone string, popts *Options) {
+func getMasterSerial(zone string, popts *Options) {
 
 	var err error
 	var took time.Duration
+	var master = new(Master)
+
+	output.Master = master
 
 	if popts.masterIP == nil {
-		ipv4list := getIPAddresses(popts.masterName, dns.TypeA, *popts)
+		master.Name = popts.masterName
+		ipv4list := getIPAddresses(master.Name, dns.TypeA, *popts)
 		if ipv4list == nil {
-			fmt.Printf("Error: couldn't resolve master name: %s\n", popts.masterName)
-			os.Exit(3)
+			bailout(3,
+				fmt.Sprintf("Error: couldn't resolve master name: %s", master.Name),
+				*popts)
 		}
 		popts.masterIP = ipv4list[0]
+		master.IP = popts.masterIP.String()
 	} else {
 		popts.masterName = popts.masterIP.String()
+		master.IP = popts.masterName
 	}
 
 	popts.masterSerial, took, err = getSerial(zone, popts.masterIP, *popts)
-	if err == nil {
-		fmt.Printf("%15d [%8s] %s %s %.2fms\n", popts.masterSerial, "MASTER",
-			popts.masterName, popts.masterIP, tookMilliSeconds(took))
-		serialList = append(serialList, popts.masterSerial)
-	} else {
-		fmt.Printf("Error: %s %s: couldn't obtain serial: %s\n",
-			popts.masterName, popts.masterIP, err.Error())
-		os.Exit(3)
-	}
 
+	if err == nil {
+		master.Serial = popts.masterSerial
+		master.Resptime = took.Seconds() * 1000.0
+		serialList = append(serialList, popts.masterSerial)
+		if !popts.json {
+			fmt.Printf("%15d [%8s] %s %s %.2fms\n", popts.masterSerial, "MASTER",
+				popts.masterName, popts.masterIP, MilliSeconds(took))
+		}
+	} else {
+		master.Err = err.Error()
+		bailout(3,
+			fmt.Sprintf("Error: %s %s: couldn't obtain serial: %s\n",
+				popts.masterName, popts.masterIP, err.Error()),
+			*popts)
+	}
 }
 
 func printResult(r *Response, opts Options) {
 
-	if r.err == nil {
-		if opts.masterIP != nil {
-			delta := int(opts.masterSerial) - int(r.serial)
-			fmt.Printf("%15d [%8d] %s %s %.2fms\n", r.serial, delta, r.nsname, r.nsip, tookMilliSeconds(r.took))
-		} else {
-			fmt.Printf("%15d %s %s %.2fms\n", r.serial, r.nsname, r.nsip, tookMilliSeconds(r.took))
-		}
-	} else {
-		fmt.Printf("Error: %s %s: couldn't obtain serial: %s\n",
-			r.nsname, r.nsip, r.err.Error())
+	if r.err != nil {
+		fmt.Printf("Error: %s %s: couldn't obtain serial: %s\n", r.Nsname, r.ip, r.err.Error())
+		return
 	}
+	if opts.masterIP == nil {
+		fmt.Printf("%15d %s %s %.2fms\n", r.Serial, r.Nsname, r.ip, MilliSeconds(r.resptime))
+		return
+	}
+	fmt.Printf("%15d [%8d] %s %s %.2fms\n", r.Serial, *r.Delta, r.Nsname, r.ip, MilliSeconds(r.resptime))
 }
 
 func getAdditionalServers(opts Options) []string {
@@ -281,6 +333,29 @@ func getAdditionalServers(opts Options) []string {
 	return s
 }
 
+func bailout(status int, message string, opts Options) {
+
+	output.Status = status
+	if status != 0 && message == "" {
+		message = StatusCode[status]
+	}
+	output.Error = message
+
+	if opts.json {
+		b, err := json.Marshal(output)
+		if err != nil {
+			log.Fatal("error:", err)
+		}
+		fmt.Printf("%s\n", b)
+	} else {
+		if message != "" {
+			fmt.Printf("Error: %s\n", message)
+		}
+	}
+
+	os.Exit(status)
+}
+
 func main() {
 
 	var err error
@@ -292,8 +367,7 @@ func main() {
 
 	opts.resolvers, err = GetResolver(opts.resolvconf)
 	if err != nil {
-		fmt.Printf("Error getting resolver: %s\n", err.Error())
-		os.Exit(1)
+		bailout(2, fmt.Sprintf("Error getting resolver: %s", err.Error()), opts)
 	}
 
 	if opts.additional != "" {
@@ -306,9 +380,16 @@ func main() {
 
 	opts.qopts.rdflag = false
 
-	fmt.Printf("## %s %s\n", zone, time.Now().Format("2006-01-02T15:04:05MST"))
+	timestamp := time.Now().Format("2006-01-02T15:04:05MST")
+	if opts.json {
+		output.Zone = zone
+		output.Timestamp = timestamp
+	} else {
+		fmt.Printf("## %s %s\n", zone, timestamp)
+	}
+
 	if opts.masterIP != nil || opts.masterName != "" {
-		printMasterSerial(zone, &opts)
+		getMasterSerial(zone, &opts)
 	}
 
 	go func() {
@@ -322,19 +403,21 @@ func main() {
 	}()
 
 	for r := range results {
-		ResponseByName[r.nsname] = append(ResponseByName[r.nsname], *r)
-		if !opts.sortresponse {
+		ResponseByName[r.Nsname] = append(ResponseByName[r.Nsname], *r)
+		if !opts.sortresponse && !opts.json {
 			printResult(r, opts)
 		}
 		if r.err != nil {
 			rc = 2
 		} else {
-			serialList = append(serialList, r.serial)
+			serialList = append(serialList, r.Serial)
 		}
 	}
 
-	if opts.sortresponse {
+	if opts.sortresponse || opts.json {
 		nsname_list := make([]string, 0, len(ResponseByName))
+
+		output.Responses = make([]Response, 0, len(ResponseByName))
 
 		for k := range ResponseByName {
 			nsname_list = append(nsname_list, k)
@@ -344,14 +427,17 @@ func main() {
 			responses := ResponseByName[nsname]
 			sort.Sort(ByIPversion(responses))
 			for _, r := range responses {
-				printResult(&r, opts)
+				if !opts.json {
+					printResult(&r, opts)
+				} else {
+					output.Responses = append(output.Responses, r)
+				}
 			}
 		}
 	}
 
 	if serialList == nil {
-		fmt.Printf("ERROR: no SOA serials obtained.\n")
-		os.Exit(2)
+		bailout(2, "ERROR: no SOA serials obtained.\n", opts)
 	}
 
 	if rc != 2 {
@@ -360,5 +446,5 @@ func main() {
 			rc = 1
 		}
 	}
-	os.Exit(rc)
+	bailout(rc, "", opts)
 }

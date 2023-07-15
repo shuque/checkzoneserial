@@ -23,7 +23,7 @@ Just run 'go build'. This will generate the executable 'checkzoneserial'.
 
 ```
 $ checkzoneserial -h
-checkzoneserial, version 1.0.3
+checkzoneserial, version 1.1.0
 Usage: checkzoneserial [Options] <zone>
 
         Options:
@@ -32,6 +32,7 @@ Usage: checkzoneserial [Options] <zone>
         -6          Use IPv6 transport only
         -cf file    Use alternate resolv.conf file
         -s          Print responses sorted by domain name and IP version
+        -j          Produce json formatted output (implies -s)
         -c          Use TCP for queries (default: UDP with TCP on truncation)
         -t N        Query timeout value in seconds (default 3)
         -r N        Maximum # SOA query retries for each server (default 3)
@@ -129,4 +130,108 @@ $ checkzoneserial -m 10.11.12.13 -d 2 appforce.com
      2001771861 [       1] udns3.salesforce.com. 2610:a1:1009::8 11.32ms
 $ echo $?
 1
+```
+
+Display json formatted output (-j)
+```
+$ checkzoneserial -m 10.1.2.3 -j appforce.com  | jq .
+
+{
+  "status": 1,
+  "error": "serial mismatch or exceeds drift",
+  "zone": "appforce.com.",
+  "timestamp": "2023-07-15T20:02:06EDT",
+  "master": {
+    "name": "",
+    "ip": "10.1.2.3",
+    "serial": 2025360499,
+    "resptime": 7.909792
+  },
+  "responses": [
+    {
+      "name": "udns1.salesforce.com.",
+      "ip": "2001:502:2eda::8",
+      "serial": 2025360495,
+      "delta": 4,
+      "resptime": 33.851403000000005
+    },
+    {
+      "name": "udns1.salesforce.com.",
+      "ip": "156.154.100.8",
+      "serial": 2025360495,
+      "delta": 4,
+      "resptime": 3.389384
+    },
+    {
+      "name": "udns2.salesforce.com.",
+      "ip": "2001:502:ad09::8",
+      "serial": 2025360495,
+      "delta": 4,
+      "resptime": 22.976582
+    },
+    {
+      "name": "udns2.salesforce.com.",
+      "ip": "156.154.101.8",
+      "serial": 2025360495,
+      "delta": 4,
+      "resptime": 1.929406
+    },
+    {
+      "name": "udns3.salesforce.com.",
+      "ip": "2610:a1:1009::8",
+      "serial": 2025360495,
+      "delta": 4,
+      "resptime": 33.61233
+    },
+    {
+      "name": "udns3.salesforce.com.",
+      "ip": "156.154.102.8",
+      "serial": 2025360495,
+      "delta": 4,
+      "resptime": 7.206194
+    },
+    {
+      "name": "udns4.salesforce.com.",
+      "ip": "2610:a1:1010::8",
+      "serial": 2025360495,
+      "delta": 4,
+      "resptime": 21.751995
+    },
+    {
+      "name": "udns4.salesforce.com.",
+      "ip": "156.154.103.8",
+      "serial": 2025360495,
+      "delta": 4,
+      "resptime": 2.648234
+    },
+    {
+      "name": "pch1.salesforce-dns.com.",
+      "ip": "2620:171:809::1",
+      "serial": 2025360495,
+      "delta": 4,
+      "resptime": 3.994213
+    },
+    {
+      "name": "pch1.salesforce-dns.com.",
+      "ip": "206.223.122.1",
+      "serial": 2025360495,
+      "delta": 4,
+      "resptime": 4.748021
+    },
+    {
+      "name": "pch2.salesforce-dns.com.",
+      "ip": "2620:171:80a::1",
+      "serial": 2025360495,
+      "delta": 4,
+      "resptime": 4.633182
+    },
+    {
+      "name": "pch2.salesforce-dns.com.",
+      "ip": "199.184.183.1",
+      "serial": 2025360495,
+      "delta": 4,
+      "resptime": 4.594670000000001
+    }
+  ]
+}
 ```
