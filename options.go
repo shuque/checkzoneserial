@@ -10,9 +10,9 @@ import (
 	"github.com/miekg/dns"
 )
 
-// Options - query options
+// Options - main options
 type Options struct {
-	qopts        QueryOptions
+	Qopts        QueryOptions
 	useV6        bool
 	useV4        bool
 	sortresponse bool
@@ -27,11 +27,24 @@ type Options struct {
 	delta        int
 }
 
+// QueryOptions - query options
+type QueryOptions struct {
+	rdflag  bool
+	adflag  bool
+	cdflag  bool
+	timeout time.Duration
+	retries int
+	tcp     bool
+	bufsize uint16
+	nsid    bool
+}
+
 // Defaults
 var (
 	defaultTimeout     = 3
 	defaultRetries     = 3
 	defaultSerialDelta = 0
+	defaultBufsize     = uint16(1400)
 )
 
 func doFlags() (string, Options) {
@@ -43,14 +56,17 @@ func doFlags() (string, Options) {
 	flag.BoolVar(&opts.useV4, "4", false, "use IPv4 only")
 	flag.BoolVar(&opts.sortresponse, "s", false, "sort responses")
 	flag.BoolVar(&opts.json, "j", false, "output json")
-	flag.BoolVar(&opts.qopts.tcp, "c", false, "use IPv4 only")
+	flag.BoolVar(&opts.Qopts.tcp, "c", false, "use IPv4 only")
 	flag.StringVar(&opts.resolvconf, "cf", "", "use alternate resolv.conf file")
 	master := flag.String("m", "", "master server address")
 	flag.StringVar(&opts.additional, "a", "", "additional nameservers: n1,n2..")
 	flag.BoolVar(&opts.noqueryns, "n", false, "don't query advertised nameservers")
 	flag.IntVar(&opts.delta, "d", defaultSerialDelta, "allowed serial number drift")
 	timeoutp := flag.Int("t", defaultTimeout, "query timeout in seconds")
-	flag.IntVar(&opts.qopts.retries, "r", defaultRetries, "number of query retries")
+	flag.IntVar(&opts.Qopts.retries, "r", defaultRetries, "number of query retries")
+	var bufsize uint
+	flag.UintVar(&bufsize, "b", uint(defaultBufsize), "buffer size for DNS messages")
+	flag.BoolVar(&opts.Qopts.nsid, "nsid", false, "request NSID option in DNS queries")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `%s, version %s
@@ -67,14 +83,17 @@ Usage: %s [Options] <zone>
 	-t N        Query timeout value in seconds (default %d)
 	-r N        Maximum # SOA query retries for each server (default %d)
 	-d N        Allowed SOA serial number drift (default %d)
+	-b N        Buffer size for DNS messages (default %d)
+	-nsid       Request NSID option in DNS queries
 	-m ns       Master server name/address to compare serial numbers with
 	-a ns1,..   Specify additional nameserver names/addresses to query
 	-n          Don't query advertised nameservers for the zone
-`, progname, Version, progname, defaultTimeout, defaultRetries, defaultSerialDelta)
+`, progname, Version, progname, defaultTimeout, defaultRetries, defaultSerialDelta, defaultBufsize)
 	}
 
 	flag.Parse()
-	opts.qopts.timeout = time.Second * time.Duration(*timeoutp)
+	opts.Qopts.timeout = time.Second * time.Duration(*timeoutp)
+	opts.Qopts.bufsize = uint16(bufsize)
 
 	if *help {
 		flag.Usage()

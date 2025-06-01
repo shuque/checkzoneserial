@@ -23,7 +23,7 @@ Just run 'go build'. This will generate the executable 'checkzoneserial'.
 
 ```
 $ checkzoneserial -h
-checkzoneserial, version 1.1.0
+checkzoneserial, version 1.1.1
 Usage: checkzoneserial [Options] <zone>
 
         Options:
@@ -37,6 +37,8 @@ Usage: checkzoneserial [Options] <zone>
         -t N        Query timeout value in seconds (default 3)
         -r N        Maximum # SOA query retries for each server (default 3)
         -d N        Allowed SOA serial number drift (default 0)
+        -b N        Buffer size for DNS messages (default 1400)
+        -nsid       Request NSID option in DNS queries
         -m ns       Master server name/address to compare serial numbers with
         -a ns1,..   Specify additional nameserver names/addresses to query
         -n          Don't query advertised nameservers for the zone

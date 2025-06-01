@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -16,7 +17,7 @@ import (
 )
 
 // Version and Program name strings
-var Version = "1.1.0"
+var Version = "1.1.1"
 var progname = path.Base(os.Args[0])
 
 // Status codes
@@ -43,6 +44,7 @@ type Response struct {
 	Delta    *int   `json:"delta,omitempty"`
 	resptime time.Duration
 	Resptime float64 `json:"resptime"`
+	Nsid     string  `json:"nsid,omitempty"`
 	err      error
 	Err      string `json:"error,omitempty"`
 }
@@ -100,11 +102,11 @@ func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
 
 	var ipList []net.IP
 
-	opts.qopts.rdflag = true
+	opts.Qopts.rdflag = true
 
 	switch rrtype {
 	case dns.TypeAAAA, dns.TypeA:
-		response, err := SendQuery(hostname, rrtype, opts.resolvers, opts.qopts)
+		response, err := SendQuery(hostname, rrtype, opts.resolvers, opts.Qopts)
 		if err != nil || response == nil {
 			break
 		}
@@ -125,36 +127,51 @@ func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
 
 }
 
-func getSerial(zone string, ip net.IP, opts Options) (serial uint32, took time.Duration, err error) {
+func getSerial(zone string, ip net.IP, opts Options) (serial uint32, took time.Duration, nsid string, err error) {
 
 	var response *dns.Msg
 
-	opts.qopts.rdflag = false
+	opts.Qopts.rdflag = false
 
 	t0 := time.Now()
-	response, err = SendQuery(zone, dns.TypeSOA, []net.IP{ip}, opts.qopts)
+	response, err = SendQuery(zone, dns.TypeSOA, []net.IP{ip}, opts.Qopts)
 	took = time.Since(t0)
 
 	if err != nil {
-		return serial, took, err
+		return serial, took, nsid, err
 	}
 	switch response.MsgHdr.Rcode {
 	case dns.RcodeSuccess:
 		break
 	case dns.RcodeNameError:
-		return serial, took, fmt.Errorf("NXDOMAIN: %s: name doesn't exist", zone)
+		return serial, took, nsid, fmt.Errorf("NXDOMAIN: %s: name doesn't exist", zone)
 	default:
-		return serial, took, fmt.Errorf("response code: %s",
+		return serial, took, nsid, fmt.Errorf("response code: %s",
 			dns.RcodeToString[response.MsgHdr.Rcode])
+	}
+
+	ednsopt := response.IsEdns0()
+	if ednsopt != nil {
+		for _, o := range ednsopt.Option {
+			switch o.(type) {
+			case *dns.EDNS0_NSID:
+				h, err := hex.DecodeString(o.String())
+				if err != nil {
+					nsid = o.String()
+				} else {
+					nsid = string(h)
+				}
+			}
+		}
 	}
 
 	for _, rr := range response.Answer {
 		if rr.Header().Rrtype == dns.TypeSOA {
-			return rr.(*dns.SOA).Serial, took, nil
+			return rr.(*dns.SOA).Serial, took, nsid, nil
 		}
 	}
 
-	return serial, took, fmt.Errorf("SOA record not found at %s",
+	return serial, took, nsid, fmt.Errorf("SOA record not found at %s",
 		ip.String())
 }
 
@@ -162,7 +179,7 @@ func getSerialAsync(zone string, ip net.IP, nsName string, opts Options) {
 
 	defer wg.Done()
 
-	serial, resptime, err := getSerial(zone, ip, opts)
+	serial, resptime, nsid, err := getSerial(zone, ip, opts)
 	<-tokens // Release token
 
 	r := new(Response)
@@ -170,6 +187,7 @@ func getSerialAsync(zone string, ip net.IP, nsName string, opts Options) {
 	r.Nsip = ip.String()
 	r.Nsname = nsName
 	r.Serial = serial
+	r.Nsid = nsid
 	r.resptime = resptime
 	r.Resptime = resptime.Seconds() * 1000.0
 	if opts.masterIP != nil {
@@ -187,8 +205,8 @@ func getNSnames(zone string, opts Options) []string {
 
 	var nsNameList []string
 
-	opts.qopts.rdflag = true
-	response, err := SendQuery(zone, dns.TypeNS, opts.resolvers, opts.qopts)
+	opts.Qopts.rdflag = true
+	response, err := SendQuery(zone, dns.TypeNS, opts.resolvers, opts.Qopts)
 	if err != nil {
 		bailout(1, err.Error(), opts)
 	}
@@ -263,6 +281,7 @@ func getMasterSerial(zone string, popts *Options) {
 
 	var err error
 	var took time.Duration
+	var nsid string
 	var master = new(Master)
 
 	output.Master = master
@@ -282,15 +301,20 @@ func getMasterSerial(zone string, popts *Options) {
 		master.IP = popts.masterName
 	}
 
-	popts.masterSerial, took, err = getSerial(zone, popts.masterIP, *popts)
+	popts.masterSerial, took, nsid, err = getSerial(zone, popts.masterIP, *popts)
 
 	if err == nil {
 		master.Serial = popts.masterSerial
 		master.Resptime = took.Seconds() * 1000.0
 		serialList = append(serialList, popts.masterSerial)
 		if !popts.json {
-			fmt.Printf("%15d [%8s] %s %s %.2fms\n", popts.masterSerial, "MASTER",
-				popts.masterName, popts.masterIP, MilliSeconds(took))
+			if popts.Qopts.nsid {
+				fmt.Printf("%15d [%8s] %s %s %.2fms %s\n", popts.masterSerial, "MASTER",
+					popts.masterName, popts.masterIP, MilliSeconds(took), nsid)
+			} else {
+				fmt.Printf("%15d [%8s] %s %s %.2fms\n", popts.masterSerial, "MASTER",
+					popts.masterName, popts.masterIP, MilliSeconds(took))
+			}
 		}
 	} else {
 		master.Err = err.Error()
@@ -308,10 +332,18 @@ func printResult(r *Response, opts Options) {
 		return
 	}
 	if opts.masterIP == nil {
-		fmt.Printf("%15d %s %s %.2fms\n", r.Serial, r.Nsname, r.ip, MilliSeconds(r.resptime))
+		if opts.Qopts.nsid {
+			fmt.Printf("%15d %s %s %.2fms %s\n", r.Serial, r.Nsname, r.ip, MilliSeconds(r.resptime), r.Nsid)
+		} else {
+			fmt.Printf("%15d %s %s %.2fms\n", r.Serial, r.Nsname, r.ip, MilliSeconds(r.resptime))
+		}
 		return
 	}
-	fmt.Printf("%15d [%8d] %s %s %.2fms\n", r.Serial, *r.Delta, r.Nsname, r.ip, MilliSeconds(r.resptime))
+	if opts.Qopts.nsid {
+		fmt.Printf("%15d [%8d] %s %s %.2fms %s\n", r.Serial, *r.Delta, r.Nsname, r.ip, MilliSeconds(r.resptime), r.Nsid)
+	} else {
+		fmt.Printf("%15d [%8d] %s %s %.2fms\n", r.Serial, *r.Delta, r.Nsname, r.ip, MilliSeconds(r.resptime))
+	}
 }
 
 func getAdditionalServers(opts Options) []string {
@@ -378,7 +410,7 @@ func main() {
 	}
 	requests = getRequests(nsNameList, opts)
 
-	opts.qopts.rdflag = false
+	opts.Qopts.rdflag = false
 
 	timestamp := time.Now().Format("2006-01-02T15:04:05MST")
 	if opts.json {
