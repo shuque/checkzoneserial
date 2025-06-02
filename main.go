@@ -98,7 +98,7 @@ func minmax(a []uint32) (min uint32, max uint32) {
 	return min, max
 }
 
-func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
+func getIPAddresses(hostname string, rrtype uint16, opts *Options) []net.IP {
 
 	var ipList []net.IP
 
@@ -124,10 +124,9 @@ func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
 	}
 
 	return ipList
-
 }
 
-func getSerial(zone string, ip net.IP, opts Options) (serial uint32, took time.Duration, nsid string, err error) {
+func getSerial(zone string, ip net.IP, opts *Options) (serial uint32, took time.Duration, nsid string, err error) {
 
 	var response *dns.Msg
 
@@ -175,7 +174,7 @@ func getSerial(zone string, ip net.IP, opts Options) (serial uint32, took time.D
 		ip.String())
 }
 
-func getSerialAsync(zone string, ip net.IP, nsName string, opts Options) {
+func getSerialAsync(zone string, ip net.IP, nsName string, opts *Options) {
 
 	defer wg.Done()
 
@@ -201,24 +200,24 @@ func getSerialAsync(zone string, ip net.IP, nsName string, opts Options) {
 	results <- r
 }
 
-func getNSnames(zone string, opts Options) []string {
+func getNSnames(zone string, opts *Options) []string {
 
 	var nsNameList []string
 
 	opts.Qopts.rdflag = true
 	response, err := SendQuery(zone, dns.TypeNS, opts.resolvers, opts.Qopts)
 	if err != nil {
-		bailout(1, err.Error(), opts)
+		bailout(1, err.Error(), *opts)
 	}
 	if response.MsgHdr.Rcode == dns.RcodeNameError {
 		bailout(1,
 			fmt.Sprintf("%s doesn't exist", zone),
-			opts)
+			*opts)
 	}
 	if response.MsgHdr.Rcode != dns.RcodeSuccess {
 		bailout(1,
 			fmt.Sprintf("%s response code: %s", zone, dns.RcodeToString[response.MsgHdr.Rcode]),
-			opts)
+			*opts)
 	}
 	for _, rr := range response.Answer {
 		if rr.Header().Rrtype == dns.TypeNS {
@@ -228,13 +227,13 @@ func getNSnames(zone string, opts Options) []string {
 	if nsNameList == nil {
 		bailout(1,
 			fmt.Sprintf("%s no nameserver records found", zone),
-			opts)
+			*opts)
 	}
 
 	return nsNameList
 }
 
-func getRequests(nsNameList []string, opts Options) []*Request {
+func getRequests(nsNameList []string, opts *Options) []*Request {
 
 	var ip net.IP
 	var aList []net.IP
@@ -270,14 +269,13 @@ func getRequests(nsNameList []string, opts Options) []*Request {
 	}
 
 	return requests
-
 }
 
 func MilliSeconds(duration time.Duration) float32 {
 	return float32(duration.Microseconds()) / 1000.0
 }
 
-func getMasterSerial(zone string, popts *Options) {
+func getMasterSerial(zone string, opts *Options) {
 
 	var err error
 	var took time.Duration
@@ -286,46 +284,46 @@ func getMasterSerial(zone string, popts *Options) {
 
 	output.Master = master
 
-	if popts.masterIP == nil {
-		master.Name = popts.masterName
-		ipv4list := getIPAddresses(master.Name, dns.TypeA, *popts)
+	if opts.masterIP == nil {
+		master.Name = opts.masterName
+		ipv4list := getIPAddresses(master.Name, dns.TypeA, opts)
 		if ipv4list == nil {
 			bailout(3,
 				fmt.Sprintf("Error: couldn't resolve master name: %s", master.Name),
-				*popts)
+				*opts)
 		}
-		popts.masterIP = ipv4list[0]
-		master.IP = popts.masterIP.String()
+		opts.masterIP = ipv4list[0]
+		master.IP = opts.masterIP.String()
 	} else {
-		popts.masterName = popts.masterIP.String()
-		master.IP = popts.masterName
+		opts.masterName = opts.masterIP.String()
+		master.IP = opts.masterName
 	}
 
-	popts.masterSerial, took, nsid, err = getSerial(zone, popts.masterIP, *popts)
+	opts.masterSerial, took, nsid, err = getSerial(zone, opts.masterIP, opts)
 
 	if err == nil {
-		master.Serial = popts.masterSerial
+		master.Serial = opts.masterSerial
 		master.Resptime = took.Seconds() * 1000.0
-		serialList = append(serialList, popts.masterSerial)
-		if !popts.json {
-			if popts.Qopts.nsid {
-				fmt.Printf("%15d [%8s] %s %s %.2fms %s\n", popts.masterSerial, "MASTER",
-					popts.masterName, popts.masterIP, MilliSeconds(took), nsid)
+		serialList = append(serialList, opts.masterSerial)
+		if !opts.json {
+			if opts.Qopts.nsid {
+				fmt.Printf("%15d [%8s] %s %s %.2fms %s\n", opts.masterSerial, "MASTER",
+					opts.masterName, opts.masterIP, MilliSeconds(took), nsid)
 			} else {
-				fmt.Printf("%15d [%8s] %s %s %.2fms\n", popts.masterSerial, "MASTER",
-					popts.masterName, popts.masterIP, MilliSeconds(took))
+				fmt.Printf("%15d [%8s] %s %s %.2fms\n", opts.masterSerial, "MASTER",
+					opts.masterName, opts.masterIP, MilliSeconds(took))
 			}
 		}
 	} else {
 		master.Err = err.Error()
 		bailout(3,
 			fmt.Sprintf("Error: %s %s: couldn't obtain serial: %s\n",
-				popts.masterName, popts.masterIP, err.Error()),
-			*popts)
+				opts.masterName, opts.masterIP, err.Error()),
+			*opts)
 	}
 }
 
-func printResult(r *Response, opts Options) {
+func printResult(r *Response, opts *Options) {
 
 	if r.err != nil {
 		fmt.Printf("Error: %s %s: couldn't obtain serial: %s\n", r.Nsname, r.ip, r.err.Error())
@@ -346,7 +344,7 @@ func printResult(r *Response, opts Options) {
 	}
 }
 
-func getAdditionalServers(opts Options) []string {
+func getAdditionalServers(opts *Options) []string {
 
 	var s []string
 	var ip net.IP
@@ -403,12 +401,12 @@ func main() {
 	}
 
 	if opts.additional != "" {
-		nsNameList = getAdditionalServers(opts)
+		nsNameList = getAdditionalServers(&opts)
 	}
 	if !opts.noqueryns {
-		nsNameList = append(nsNameList, getNSnames(zone, opts)...)
+		nsNameList = append(nsNameList, getNSnames(zone, &opts)...)
 	}
-	requests = getRequests(nsNameList, opts)
+	requests = getRequests(nsNameList, &opts)
 
 	opts.Qopts.rdflag = false
 
@@ -428,7 +426,7 @@ func main() {
 		for _, x := range requests {
 			wg.Add(1)
 			tokens <- struct{}{}
-			go getSerialAsync(zone, x.nsip, x.nsname, opts)
+			go getSerialAsync(zone, x.nsip, x.nsname, &opts)
 		}
 		wg.Wait()
 		close(results)
@@ -437,7 +435,7 @@ func main() {
 	for r := range results {
 		ResponseByName[r.Nsname] = append(ResponseByName[r.Nsname], *r)
 		if !opts.sortresponse && !opts.json {
-			printResult(r, opts)
+			printResult(r, &opts)
 		}
 		if r.err != nil {
 			rc = 2
@@ -460,7 +458,7 @@ func main() {
 			sort.Sort(ByIPversion(responses))
 			for _, r := range responses {
 				if !opts.json {
-					printResult(&r, opts)
+					printResult(&r, &opts)
 				} else {
 					output.Responses = append(output.Responses, r)
 				}
