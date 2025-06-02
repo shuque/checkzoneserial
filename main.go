@@ -275,6 +275,32 @@ func MilliSeconds(duration time.Duration) float32 {
 	return float32(duration.Microseconds()) / 1000.0
 }
 
+func printSerialLine(isMaster bool, serial uint32, nsname string, nsip net.IP, elapsed time.Duration, nsid string, opts *Options) {
+	if opts.json {
+		return
+	}
+
+	// Print the base line without NSID and newline
+	if isMaster {
+		fmt.Printf("%15d [%8s] %s %s %.2fms", serial, "MASTER",
+			nsname, nsip, MilliSeconds(elapsed))
+	} else {
+		if opts.masterIP == nil {
+			fmt.Printf("%15d %s %s %.2fms", serial, nsname, nsip, MilliSeconds(elapsed))
+		} else {
+			delta := int(opts.masterSerial) - int(serial)
+			fmt.Printf("%15d [%8d] %s %s %.2fms", serial, delta, nsname, nsip, MilliSeconds(elapsed))
+		}
+	}
+
+	// Add NSID if present, then newline
+	if opts.Qopts.nsid && nsid != "" {
+		fmt.Printf(" %s\n", nsid)
+	} else {
+		fmt.Printf("\n")
+	}
+}
+
 func getMasterSerial(zone string, opts *Options) {
 
 	var err error
@@ -305,15 +331,7 @@ func getMasterSerial(zone string, opts *Options) {
 		master.Serial = opts.masterSerial
 		master.Resptime = took.Seconds() * 1000.0
 		serialList = append(serialList, opts.masterSerial)
-		if !opts.json {
-			if opts.Qopts.nsid {
-				fmt.Printf("%15d [%8s] %s %s %.2fms %s\n", opts.masterSerial, "MASTER",
-					opts.masterName, opts.masterIP, MilliSeconds(took), nsid)
-			} else {
-				fmt.Printf("%15d [%8s] %s %s %.2fms\n", opts.masterSerial, "MASTER",
-					opts.masterName, opts.masterIP, MilliSeconds(took))
-			}
-		}
+		printSerialLine(true, opts.masterSerial, opts.masterName, opts.masterIP, took, nsid, opts)
 	} else {
 		master.Err = err.Error()
 		bailout(3,
@@ -329,19 +347,7 @@ func printResult(r *Response, opts *Options) {
 		fmt.Printf("Error: %s %s: couldn't obtain serial: %s\n", r.Nsname, r.ip, r.err.Error())
 		return
 	}
-	if opts.masterIP == nil {
-		if opts.Qopts.nsid {
-			fmt.Printf("%15d %s %s %.2fms %s\n", r.Serial, r.Nsname, r.ip, MilliSeconds(r.resptime), r.Nsid)
-		} else {
-			fmt.Printf("%15d %s %s %.2fms\n", r.Serial, r.Nsname, r.ip, MilliSeconds(r.resptime))
-		}
-		return
-	}
-	if opts.Qopts.nsid {
-		fmt.Printf("%15d [%8d] %s %s %.2fms %s\n", r.Serial, *r.Delta, r.Nsname, r.ip, MilliSeconds(r.resptime), r.Nsid)
-	} else {
-		fmt.Printf("%15d [%8d] %s %s %.2fms\n", r.Serial, *r.Delta, r.Nsname, r.ip, MilliSeconds(r.resptime))
-	}
+	printSerialLine(false, r.Serial, r.Nsname, r.ip, r.resptime, r.Nsid, opts)
 }
 
 func getAdditionalServers(opts *Options) []string {
