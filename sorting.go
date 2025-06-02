@@ -62,5 +62,39 @@ func (s ByIPversion) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 func (s ByIPversion) Less(i, j int) bool {
-	return s[i].ip.To4() == nil
+	// Handle nil IPs
+	if s[i].ip == nil {
+		return true
+	}
+	if s[j].ip == nil {
+		return false
+	}
+
+	// Compare IPv4 vs IPv6
+	iIsIPv4 := s[i].ip.To4() != nil
+	jIsIPv4 := s[j].ip.To4() != nil
+
+	if iIsIPv4 != jIsIPv4 {
+		return !iIsIPv4 // IPv6 comes before IPv4
+	}
+
+	// If both are same type, compare the IPs numerically
+	if iIsIPv4 {
+		// For IPv4, compare as 32-bit integers
+		i4 := s[i].ip.To4()
+		j4 := s[j].ip.To4()
+		for k := 0; k < 4; k++ {
+			if i4[k] != j4[k] {
+				return i4[k] < j4[k]
+			}
+		}
+	} else {
+		// For IPv6, compare as 128-bit integers
+		for k := 0; k < 16; k++ {
+			if s[i].ip[k] != s[j].ip[k] {
+				return s[i].ip[k] < s[j].ip[k]
+			}
+		}
+	}
+	return false // IPs are equal
 }
