@@ -23,7 +23,7 @@ Just run 'go build'. This will generate the executable 'checkzoneserial'.
 
 ```
 $ checkzoneserial -h
-checkzoneserial, version 1.1.1
+checkzoneserial, version 1.1.2
 Usage: checkzoneserial [Options] <zone>
 
         Options:

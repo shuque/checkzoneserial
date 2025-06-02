@@ -17,7 +17,7 @@ import (
 )
 
 // Version and Program name strings
-var Version = "1.1.1"
+var Version = "1.1.2"
 var progname = path.Base(os.Args[0])
 
 // Status codes
