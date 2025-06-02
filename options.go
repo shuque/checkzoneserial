@@ -37,6 +37,7 @@ type QueryOptions struct {
 	tcp     bool
 	bufsize uint16
 	nsid    bool
+	port    string
 }
 
 // Defaults

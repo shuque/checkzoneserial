@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -66,9 +67,21 @@ func MakeQuery(qname string, qtype uint16, qopts QueryOptions) *dns.Msg {
 	return m
 }
 
+// getDestination returns the destination address string with the appropriate port
+func getDestination(ipaddr net.IP, qopts QueryOptions) (string, error) {
+	port := 53
+	if qopts.port != "" {
+		var err error
+		port, err = strconv.Atoi(qopts.port)
+		if err != nil {
+			return "", fmt.Errorf("invalid port number: %v", err)
+		}
+	}
+	return AddressString(ipaddr.String(), port), nil
+}
+
 // SendQueryUDP - send DNS query via UDP
 func SendQueryUDP(query *dns.Msg, ipaddrs []net.IP, qopts QueryOptions) (response *dns.Msg, err error) {
-
 	var retries = qopts.retries
 
 	c := new(dns.Client)
@@ -77,7 +90,10 @@ func SendQueryUDP(query *dns.Msg, ipaddrs []net.IP, qopts QueryOptions) (respons
 
 	for retries > 0 {
 		for _, ipaddr := range ipaddrs {
-			destination := AddressString(ipaddr.String(), 53)
+			destination, err := getDestination(ipaddr, qopts)
+			if err != nil {
+				return nil, err
+			}
 			response, _, err = c.Exchange(query, destination)
 			if err == nil {
 				return response, err
@@ -94,13 +110,15 @@ func SendQueryUDP(query *dns.Msg, ipaddrs []net.IP, qopts QueryOptions) (respons
 
 // SendQueryTCP - send DNS query via TCP
 func SendQueryTCP(query *dns.Msg, ipaddrs []net.IP, qopts QueryOptions) (response *dns.Msg, err error) {
-
 	c := new(dns.Client)
 	c.Net = "tcp"
 	c.Timeout = qopts.timeout
 
 	for _, ipaddr := range ipaddrs {
-		destination := AddressString(ipaddr.String(), 53)
+		destination, err := getDestination(ipaddr, qopts)
+		if err != nil {
+			return nil, err
+		}
 		response, _, err = c.Exchange(query, destination)
 		if err == nil {
 			return response, err
