@@ -64,7 +64,7 @@ type Output struct {
 	Error     string     `json:"error,omitempty"`
 	Zone      string     `json:"zone"`
 	Timestamp string     `json:"timestamp"`
-	Master    *Master    `json:"master"`
+	Master    *Master    `json:"master,omitempty"`
 	Responses []Response `json:"responses"`
 }
 
@@ -280,7 +280,6 @@ func printSerialLine(isMaster bool, serial uint32, nsname string, nsip net.IP, e
 		return
 	}
 
-	// Print the base line without NSID and newline
 	if isMaster {
 		fmt.Printf("%15d [%8s] %s %s %.2fms", serial, "MASTER",
 			nsname, nsip, MilliSeconds(elapsed))
@@ -293,7 +292,6 @@ func printSerialLine(isMaster bool, serial uint32, nsname string, nsip net.IP, e
 		}
 	}
 
-	// Add NSID if present, then newline
 	if opts.Qopts.nsid && nsid != "" {
 		fmt.Printf(" %s\n", nsid)
 	} else {
