@@ -299,6 +299,26 @@ func printSerialLine(isMaster bool, serial uint32, nsname string, nsip net.IP, e
 	}
 }
 
+func getMasterAddress(name string, opts *Options) net.IP {
+	// Try IPv6 if IPv4-only is not specified
+	if !opts.useV4 {
+		ipv6list := getIPAddresses(name, dns.TypeAAAA, opts)
+		if len(ipv6list) > 0 {
+			return ipv6list[0]
+		}
+	}
+
+	// Try IPv4 if IPv6-only is not specified
+	if !opts.useV6 {
+		ipv4list := getIPAddresses(name, dns.TypeA, opts)
+		if len(ipv4list) > 0 {
+			return ipv4list[0]
+		}
+	}
+
+	return nil
+}
+
 func getMasterSerial(zone string, opts *Options) {
 
 	var err error
@@ -310,13 +330,12 @@ func getMasterSerial(zone string, opts *Options) {
 
 	if opts.masterIP == nil {
 		master.Name = opts.masterName
-		ipv4list := getIPAddresses(master.Name, dns.TypeA, opts)
-		if ipv4list == nil {
+		opts.masterIP = getMasterAddress(master.Name, opts)
+		if opts.masterIP == nil {
 			bailout(3,
 				fmt.Sprintf("Error: couldn't resolve master name: %s", master.Name),
 				*opts)
 		}
-		opts.masterIP = ipv4list[0]
 		master.IP = opts.masterIP.String()
 	} else {
 		opts.masterName = opts.masterIP.String()

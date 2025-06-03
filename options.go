@@ -59,7 +59,7 @@ func doFlags() (string, Options) {
 	flag.BoolVar(&opts.json, "j", false, "output json")
 	flag.BoolVar(&opts.Qopts.tcp, "c", false, "use IPv4 only")
 	flag.StringVar(&opts.resolvconf, "cf", "", "use alternate resolv.conf file")
-	master := flag.String("m", "", "master server address")
+	master := flag.String("m", "", "master server name or address")
 	flag.StringVar(&opts.additional, "a", "", "additional nameservers: n1,n2..")
 	flag.BoolVar(&opts.noqueryns, "n", false, "don't query advertised nameservers")
 	flag.IntVar(&opts.delta, "d", defaultSerialDelta, "allowed serial number drift")
