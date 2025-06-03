@@ -13,8 +13,8 @@ import (
 // Options - main options
 type Options struct {
 	Qopts        QueryOptions
-	useV6        bool
-	useV4        bool
+	V6Only       bool
+	V4Only       bool
 	sortresponse bool
 	json         bool
 	resolvconf   string
@@ -48,13 +48,12 @@ var (
 	defaultBufsize     = uint16(1400)
 )
 
-func doFlags() (string, Options) {
-
+func doFlags() (string, Options, error) {
 	var opts Options
 
 	help := flag.Bool("h", false, "print help string")
-	flag.BoolVar(&opts.useV6, "6", false, "use IPv6 only")
-	flag.BoolVar(&opts.useV4, "4", false, "use IPv4 only")
+	flag.BoolVar(&opts.V6Only, "6", false, "use IPv6 only")
+	flag.BoolVar(&opts.V4Only, "4", false, "use IPv4 only")
 	flag.BoolVar(&opts.sortresponse, "s", false, "sort responses")
 	flag.BoolVar(&opts.json, "j", false, "output json")
 	flag.BoolVar(&opts.Qopts.tcp, "c", false, "use IPv4 only")
@@ -98,7 +97,7 @@ Usage: %s [Options] <zone>
 
 	if *help {
 		flag.Usage()
-		os.Exit(4)
+		return "", opts, fmt.Errorf("help requested")
 	}
 
 	if *master != "" {
@@ -108,17 +107,13 @@ Usage: %s [Options] <zone>
 		}
 	}
 
-	if opts.useV4 && opts.useV6 {
-		fmt.Fprintf(os.Stderr, "Cannot specify both -4 and -6.\n")
-		flag.Usage()
-		os.Exit(4)
+	if opts.V4Only && opts.V6Only {
+		return "", opts, fmt.Errorf("cannot specify both -4 and -6")
 	}
 
 	if flag.NArg() != 1 {
-		fmt.Fprintf(os.Stderr, "Incorrect number of arguments.\n")
-		flag.Usage()
-		os.Exit(4)
+		return "", opts, fmt.Errorf("incorrect number of arguments")
 	}
 	args := flag.Args()
-	return dns.Fqdn(args[0]), opts
+	return dns.Fqdn(args[0]), opts, nil
 }

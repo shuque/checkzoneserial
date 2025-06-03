@@ -252,11 +252,11 @@ func getRequests(nsNameList []string, opts *Options) []*Request {
 			continue
 		}
 		aList = make([]net.IP, 0)
-		if !opts.useV4 {
+		if !opts.V4Only {
 			aList = append(aList,
 				getIPAddresses(nsName, dns.TypeAAAA, opts)...)
 		}
-		if !opts.useV6 {
+		if !opts.V6Only {
 			aList = append(aList,
 				getIPAddresses(nsName, dns.TypeA, opts)...)
 		}
@@ -301,7 +301,7 @@ func printSerialLine(isMaster bool, serial uint32, nsname string, nsip net.IP, e
 
 func getMasterAddress(name string, opts *Options) net.IP {
 	// Try IPv6 if IPv4-only is not specified
-	if !opts.useV4 {
+	if !opts.V4Only {
 		ipv6list := getIPAddresses(name, dns.TypeAAAA, opts)
 		if len(ipv6list) > 0 {
 			return ipv6list[0]
@@ -309,7 +309,7 @@ func getMasterAddress(name string, opts *Options) net.IP {
 	}
 
 	// Try IPv4 if IPv6-only is not specified
-	if !opts.useV6 {
+	if !opts.V6Only {
 		ipv4list := getIPAddresses(name, dns.TypeA, opts)
 		if len(ipv4list) > 0 {
 			return ipv4list[0]
@@ -416,7 +416,10 @@ func main() {
 	var nsNameList []string
 	var requests []*Request
 
-	zone, opts := doFlags()
+	zone, opts, err := doFlags()
+	if err != nil {
+		os.Exit(4)
+	}
 
 	opts.resolvers, err = GetResolver(opts.resolvconf)
 	if err != nil {
