@@ -209,11 +209,6 @@ func getNSnames(zone string, opts *Options) []string {
 	if err != nil {
 		bailout(1, err.Error(), *opts)
 	}
-	if response.MsgHdr.Rcode == dns.RcodeNameError {
-		bailout(1,
-			fmt.Sprintf("%s doesn't exist", zone),
-			*opts)
-	}
 	if response.MsgHdr.Rcode != dns.RcodeSuccess {
 		bailout(1,
 			fmt.Sprintf("%s response code: %s", zone, dns.RcodeToString[response.MsgHdr.Rcode]),
