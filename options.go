@@ -112,6 +112,7 @@ Usage: %s [Options] <zone>
 	}
 
 	if flag.NArg() != 1 {
+		flag.Usage()
 		return "", opts, fmt.Errorf("incorrect number of arguments")
 	}
 	args := flag.Args()
