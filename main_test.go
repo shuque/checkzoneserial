@@ -2,6 +2,7 @@ package main
 
 import (
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -441,3 +442,189 @@ func searchString(s, substr string) bool {
 	}
 	return false
 }
+
+// newSOAServer creates a mock DNS server returning the given serial for SOA queries
+// and returns the server, its IP, and port.
+func newSOAServer(t *testing.T, serial uint32) (*mockDNSServer, string, string) {
+	server := newMockDNSServer(t, soaMockHandler(serial))
+	<-server.ready
+	host, port, _ := net.SplitHostPort(server.udpAddr)
+	return server, host, port
+}
+
+// alternatingSOAHandler returns a handler where the first SOA query returns
+// masterSerial and all subsequent queries return slaveSerial.
+func alternatingSOAHandler(masterSerial, slaveSerial uint32) dns.Handler {
+	var mu sync.Mutex
+	first := true
+	return dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
+		mu.Lock()
+		serial := slaveSerial
+		if first {
+			serial = masterSerial
+			first = false
+		}
+		mu.Unlock()
+
+		m := new(dns.Msg)
+		m.SetReply(r)
+		m.Answer = []dns.RR{
+			&dns.SOA{
+				Hdr: dns.RR_Header{
+					Name:   r.Question[0].Name,
+					Rrtype: dns.TypeSOA,
+					Class:  dns.ClassINET,
+					Ttl:    3600,
+				},
+				Ns:     "ns1.example.com.",
+				Mbox:   "admin.example.com.",
+				Serial: serial,
+			},
+		}
+		w.WriteMsg(m)
+	})
+}
+
+func TestRun(t *testing.T) {
+	t.Run("matching serials returns 0", func(t *testing.T) {
+		server, host, port := newSOAServer(t, 2024010100)
+		defer server.close()
+
+		rn := NewRunner()
+		opts := Options{
+			noqueryns:  true,
+			additional: host,
+			Qopts: QueryOptions{
+				timeout: 2 * time.Second,
+				retries: 1,
+				bufsize: defaultBufsize,
+				port:    port,
+			},
+		}
+
+		status, message := rn.run("example.com.", opts)
+		if status != 0 {
+			t.Errorf("run() status = %d, want 0; message = %q", status, message)
+		}
+	})
+
+	t.Run("matching serials with master returns 0", func(t *testing.T) {
+		server, host, port := newSOAServer(t, 2024010100)
+		defer server.close()
+
+		rn := NewRunner()
+		opts := Options{
+			noqueryns:  true,
+			additional: host,
+			masterIP:   net.ParseIP(host),
+			Qopts: QueryOptions{
+				timeout: 2 * time.Second,
+				retries: 1,
+				bufsize: defaultBufsize,
+				port:    port,
+			},
+		}
+
+		status, message := rn.run("example.com.", opts)
+		if status != 0 {
+			t.Errorf("run() status = %d, want 0; message = %q", status, message)
+		}
+		if rn.output.Master == nil {
+			t.Fatal("output.Master is nil")
+		}
+		if rn.output.Master.Serial != 2024010100 {
+			t.Errorf("output.Master.Serial = %d, want 2024010100",
+				rn.output.Master.Serial)
+		}
+	})
+
+	t.Run("differing serials returns 1", func(t *testing.T) {
+		// First query (master) gets 2024010100, subsequent (slave) gets 2024010105
+		server := newMockDNSServer(t, alternatingSOAHandler(2024010100, 2024010105))
+		defer server.close()
+		<-server.ready
+		host, port, _ := net.SplitHostPort(server.udpAddr)
+
+		rn := NewRunner()
+		opts := Options{
+			noqueryns:  true,
+			additional: host,
+			masterIP:   net.ParseIP(host),
+			Qopts: QueryOptions{
+				timeout: 2 * time.Second,
+				retries: 1,
+				bufsize: defaultBufsize,
+				port:    port,
+			},
+		}
+
+		status, _ := rn.run("example.com.", opts)
+		if status != 1 {
+			t.Errorf("run() status = %d, want 1", status)
+		}
+	})
+
+	t.Run("differing serials within drift returns 0", func(t *testing.T) {
+		server := newMockDNSServer(t, alternatingSOAHandler(2024010100, 2024010103))
+		defer server.close()
+		<-server.ready
+		host, port, _ := net.SplitHostPort(server.udpAddr)
+
+		rn := NewRunner()
+		opts := Options{
+			noqueryns:  true,
+			additional: host,
+			masterIP:   net.ParseIP(host),
+			delta:      5,
+			Qopts: QueryOptions{
+				timeout: 2 * time.Second,
+				retries: 1,
+				bufsize: defaultBufsize,
+				port:    port,
+			},
+		}
+
+		status, message := rn.run("example.com.", opts)
+		if status != 0 {
+			t.Errorf("run() status = %d, want 0; message = %q", status, message)
+		}
+	})
+
+	t.Run("master failure returns 3", func(t *testing.T) {
+		rn := NewRunner()
+		opts := Options{
+			noqueryns:  true,
+			additional: "127.0.0.1",
+			masterIP:   net.ParseIP("127.0.0.1"),
+			Qopts: QueryOptions{
+				timeout: 100 * time.Millisecond,
+				retries: 1,
+				bufsize: defaultBufsize,
+				port:    "1", // unlikely to have a DNS server
+			},
+		}
+
+		status, _ := rn.run("example.com.", opts)
+		if status != 3 {
+			t.Errorf("run() status = %d, want 3", status)
+		}
+	})
+
+	t.Run("no servers returns 2", func(t *testing.T) {
+		rn := NewRunner()
+		opts := Options{
+			noqueryns: true,
+			Qopts: QueryOptions{
+				timeout: 2 * time.Second,
+				retries: 1,
+				bufsize: defaultBufsize,
+			},
+		}
+
+		status, message := rn.run("example.com.", opts)
+		if status != 2 {
+			t.Errorf("run() status = %d, want 2; message = %q", status, message)
+		}
+	})
+}
+
