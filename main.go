@@ -122,7 +122,7 @@ func maxSerialDrift(serials []uint32) uint32 {
 	return maxDist
 }
 
-func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
+func getIPAddresses(hostname string, rrtype uint16, opts Options) ([]net.IP, error) {
 
 	var ipList []net.IP
 
@@ -131,8 +131,11 @@ func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
 	switch rrtype {
 	case dns.TypeAAAA, dns.TypeA:
 		response, err := SendQuery(hostname, rrtype, opts.resolvers, opts.Qopts)
-		if err != nil || response == nil {
-			break
+		if err != nil {
+			return nil, err
+		}
+		if response == nil {
+			return nil, fmt.Errorf("no response for %s %s", hostname, dns.TypeToString[rrtype])
 		}
 		for _, rr := range response.Answer {
 			if rr.Header().Rrtype == rrtype {
@@ -144,10 +147,10 @@ func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
 			}
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "getIPAddresses: %d: invalid rrtype\n", rrtype)
+		return nil, fmt.Errorf("getIPAddresses: %d: invalid rrtype", rrtype)
 	}
 
-	return ipList
+	return ipList, nil
 }
 
 func getSerial(zone string, ip net.IP, opts Options) (serial uint32, took time.Duration, nsid string, err error) {
@@ -271,12 +274,18 @@ func getRequests(nsNameList []string, opts *Options) []*Request {
 		}
 		aList = make([]net.IP, 0)
 		if !opts.V4Only {
-			aList = append(aList,
-				getIPAddresses(nsName, dns.TypeAAAA, *opts)...)
+			ips, err := getIPAddresses(nsName, dns.TypeAAAA, *opts)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: %s AAAA lookup failed: %s\n", nsName, err)
+			}
+			aList = append(aList, ips...)
 		}
 		if !opts.V6Only {
-			aList = append(aList,
-				getIPAddresses(nsName, dns.TypeA, *opts)...)
+			ips, err := getIPAddresses(nsName, dns.TypeA, *opts)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: %s A lookup failed: %s\n", nsName, err)
+			}
+			aList = append(aList, ips...)
 		}
 		for _, ip := range aList {
 			r = new(Request)
@@ -320,7 +329,7 @@ func printSerialLine(isMaster bool, serial uint32, nsname string, nsip net.IP, e
 func getMasterAddress(name string, opts *Options) net.IP {
 	// Try IPv6 if IPv4-only is not specified
 	if !opts.V4Only {
-		ipv6list := getIPAddresses(name, dns.TypeAAAA, *opts)
+		ipv6list, _ := getIPAddresses(name, dns.TypeAAAA, *opts)
 		if len(ipv6list) > 0 {
 			return ipv6list[0]
 		}
@@ -328,7 +337,7 @@ func getMasterAddress(name string, opts *Options) net.IP {
 
 	// Try IPv4 if IPv6-only is not specified
 	if !opts.V6Only {
-		ipv4list := getIPAddresses(name, dns.TypeA, *opts)
+		ipv4list, _ := getIPAddresses(name, dns.TypeA, *opts)
 		if len(ipv4list) > 0 {
 			return ipv4list[0]
 		}
