@@ -215,15 +215,14 @@ func TestFormatOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Reset global output
-			output = Output{}
+			rn := NewRunner()
 			opts := Options{}
-			formatOutput(tt.status, tt.message, opts)
-			if output.Status != tt.status {
-				t.Errorf("output.Status = %d, want %d", output.Status, tt.status)
+			rn.formatOutput(tt.status, tt.message, opts)
+			if rn.output.Status != tt.status {
+				t.Errorf("output.Status = %d, want %d", rn.output.Status, tt.status)
 			}
-			if output.Error != tt.expectError {
-				t.Errorf("output.Error = %q, want %q", output.Error, tt.expectError)
+			if rn.output.Error != tt.expectError {
+				t.Errorf("output.Error = %q, want %q", rn.output.Error, tt.expectError)
 			}
 		})
 	}
@@ -355,9 +354,7 @@ func TestGetMasterSerial(t *testing.T) {
 		host, port, _ := net.SplitHostPort(server.udpAddr)
 		ip := net.ParseIP(host)
 
-		// Reset globals
-		output = Output{}
-		serialList = nil
+		rn := NewRunner()
 
 		opts := Options{
 			masterIP: ip,
@@ -369,29 +366,27 @@ func TestGetMasterSerial(t *testing.T) {
 			},
 		}
 
-		err := getMasterSerial("example.com.", &opts)
+		err := rn.getMasterSerial("example.com.", &opts)
 		if err != nil {
 			t.Fatalf("getMasterSerial() unexpected error: %v", err)
 		}
 		if opts.masterSerial != 2024010100 {
 			t.Errorf("masterSerial = %d, want %d", opts.masterSerial, 2024010100)
 		}
-		if output.Master == nil {
+		if rn.output.Master == nil {
 			t.Fatal("output.Master is nil")
 		}
-		if output.Master.Serial != 2024010100 {
+		if rn.output.Master.Serial != 2024010100 {
 			t.Errorf("output.Master.Serial = %d, want %d",
-				output.Master.Serial, 2024010100)
+				rn.output.Master.Serial, 2024010100)
 		}
-		if len(serialList) != 1 || serialList[0] != 2024010100 {
-			t.Errorf("serialList = %v, want [2024010100]", serialList)
+		if len(rn.serialList) != 1 || rn.serialList[0] != 2024010100 {
+			t.Errorf("serialList = %v, want [2024010100]", rn.serialList)
 		}
 	})
 
 	t.Run("error from unresponsive server", func(t *testing.T) {
-		// Reset globals
-		output = Output{}
-		serialList = nil
+		rn := NewRunner()
 
 		opts := Options{
 			masterIP: net.ParseIP("127.0.0.1"),
@@ -403,16 +398,14 @@ func TestGetMasterSerial(t *testing.T) {
 			},
 		}
 
-		err := getMasterSerial("example.com.", &opts)
+		err := rn.getMasterSerial("example.com.", &opts)
 		if err == nil {
 			t.Error("getMasterSerial() expected error, got nil")
 		}
 	})
 
 	t.Run("unresolvable master hostname", func(t *testing.T) {
-		// Reset globals
-		output = Output{}
-		serialList = nil
+		rn := NewRunner()
 
 		opts := Options{
 			masterName: "nonexistent.invalid.",
@@ -424,7 +417,7 @@ func TestGetMasterSerial(t *testing.T) {
 			resolvers: []net.IP{net.ParseIP("127.0.0.1")},
 		}
 
-		err := getMasterSerial("example.com.", &opts)
+		err := rn.getMasterSerial("example.com.", &opts)
 		if err == nil {
 			t.Error("getMasterSerial() expected error, got nil")
 		}

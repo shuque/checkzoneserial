@@ -29,6 +29,9 @@ var StatusCode = map[int]string{
 	4: "program invocation error",
 }
 
+// Concurrency limit
+const numParallel = 20
+
 // Request - request parameters
 type Request struct {
 	nsname string
@@ -68,21 +71,24 @@ type Output struct {
 	Responses []Response `json:"responses"`
 }
 
-// For goroutine communications and synchronization
-var (
-	wg          sync.WaitGroup
-	numParallel uint16 = 20
-	tokens             = make(chan struct{}, int(numParallel))
-	results            = make(chan *Response)
-)
+// Runner holds all mutable state for a single program execution
+type Runner struct {
+	wg             sync.WaitGroup
+	tokens         chan struct{}
+	results        chan *Response
+	output         Output
+	serialList     []uint32
+	ResponseByName map[string][]Response
+}
 
-// Other globals
-var (
-	output     Output
-	serialList []uint32
-	// map of Responses keyed by nameserver domain name
-	ResponseByName = make(map[string][]Response)
-)
+// NewRunner creates a Runner with initialized channels and maps
+func NewRunner() *Runner {
+	return &Runner{
+		tokens:         make(chan struct{}, numParallel),
+		results:        make(chan *Response),
+		ResponseByName: make(map[string][]Response),
+	}
+}
 
 // serialDistance returns the unsigned distance between two serial numbers
 // accounting for RFC 1982 serial number arithmetic (wrap at 2^32).
@@ -204,12 +210,12 @@ func getSerial(zone string, ip net.IP, opts Options) (serial uint32, took time.D
 		ip.String())
 }
 
-func getSerialAsync(zone string, ip net.IP, nsName string, opts Options) {
+func (rn *Runner) getSerialAsync(zone string, ip net.IP, nsName string, opts Options) {
 
-	defer wg.Done()
+	defer rn.wg.Done()
 
 	serial, resptime, nsid, err := getSerial(zone, ip, opts)
-	<-tokens // Release token
+	<-rn.tokens // Release token
 
 	r := new(Response)
 	r.ip = ip
@@ -227,7 +233,7 @@ func getSerialAsync(zone string, ip net.IP, nsName string, opts Options) {
 	if err != nil {
 		r.Err = err.Error()
 	}
-	results <- r
+	rn.results <- r
 }
 
 func getNSnames(zone string, opts *Options) ([]string, error) {
@@ -346,14 +352,14 @@ func getMasterAddress(name string, opts *Options) net.IP {
 	return nil
 }
 
-func getMasterSerial(zone string, opts *Options) error {
+func (rn *Runner) getMasterSerial(zone string, opts *Options) error {
 
 	var err error
 	var took time.Duration
 	var nsid string
 	var master = new(Master)
 
-	output.Master = master
+	rn.output.Master = master
 
 	if opts.masterIP == nil {
 		master.Name = opts.masterName
@@ -377,7 +383,7 @@ func getMasterSerial(zone string, opts *Options) error {
 
 	master.Serial = opts.masterSerial
 	master.Resptime = MilliSeconds(took)
-	serialList = append(serialList, opts.masterSerial)
+	rn.serialList = append(rn.serialList, opts.masterSerial)
 	printSerialLine(true, opts.masterSerial, opts.masterName, opts.masterIP, took, nsid, opts)
 	return nil
 }
@@ -410,16 +416,16 @@ func getAdditionalServers(opts *Options) []string {
 	return s
 }
 
-func formatOutput(status int, message string, opts Options) {
+func (rn *Runner) formatOutput(status int, message string, opts Options) {
 
-	output.Status = status
+	rn.output.Status = status
 	if status != 0 && message == "" {
 		message = StatusCode[status]
 	}
-	output.Error = message
+	rn.output.Error = message
 
 	if opts.json {
-		b, err := json.Marshal(output)
+		b, err := json.Marshal(rn.output)
 		if err != nil {
 			log.Fatal("error:", err)
 		}
@@ -431,7 +437,7 @@ func formatOutput(status int, message string, opts Options) {
 	}
 }
 
-func run(zone string, opts Options) (int, string) {
+func (rn *Runner) run(zone string, opts Options) (int, string) {
 
 	var err error
 	var rc int
@@ -459,68 +465,68 @@ func run(zone string, opts Options) (int, string) {
 
 	timestamp := time.Now().Format("2006-01-02T15:04:05MST")
 	if opts.json {
-		output.Zone = zone
-		output.Timestamp = timestamp
+		rn.output.Zone = zone
+		rn.output.Timestamp = timestamp
 	} else {
 		fmt.Printf("## %s %s\n", zone, timestamp)
 	}
 
 	if opts.masterIP != nil || opts.masterName != "" {
-		if err := getMasterSerial(zone, &opts); err != nil {
+		if err := rn.getMasterSerial(zone, &opts); err != nil {
 			return 3, err.Error()
 		}
 	}
 
 	go func() {
 		for _, x := range requests {
-			wg.Add(1)
-			tokens <- struct{}{}
-			go getSerialAsync(zone, x.nsip, x.nsname, opts)
+			rn.wg.Add(1)
+			rn.tokens <- struct{}{}
+			go rn.getSerialAsync(zone, x.nsip, x.nsname, opts)
 		}
-		wg.Wait()
-		close(results)
+		rn.wg.Wait()
+		close(rn.results)
 	}()
 
-	for r := range results {
-		ResponseByName[r.Nsname] = append(ResponseByName[r.Nsname], *r)
+	for r := range rn.results {
+		rn.ResponseByName[r.Nsname] = append(rn.ResponseByName[r.Nsname], *r)
 		if !opts.sortresponse && !opts.json {
 			printResult(r, &opts)
 		}
 		if r.err != nil {
 			rc = 2
 		} else {
-			serialList = append(serialList, r.Serial)
+			rn.serialList = append(rn.serialList, r.Serial)
 		}
 	}
 
 	if opts.sortresponse || opts.json {
-		nsnameList := make([]string, 0, len(ResponseByName))
+		nsnameList := make([]string, 0, len(rn.ResponseByName))
 
-		output.Responses = make([]Response, 0, len(ResponseByName))
+		rn.output.Responses = make([]Response, 0, len(rn.ResponseByName))
 
-		for k := range ResponseByName {
+		for k := range rn.ResponseByName {
 			nsnameList = append(nsnameList, k)
 		}
 		sort.Sort(ByCanonicalOrder(nsnameList))
 		for _, nsname := range nsnameList {
-			responses := ResponseByName[nsname]
+			responses := rn.ResponseByName[nsname]
 			sort.Sort(ByIPversion(responses))
 			for _, r := range responses {
 				if !opts.json {
 					printResult(&r, &opts)
 				} else {
-					output.Responses = append(output.Responses, r)
+					rn.output.Responses = append(rn.output.Responses, r)
 				}
 			}
 		}
 	}
 
-	if serialList == nil {
+	if rn.serialList == nil {
 		return 2, "ERROR: no SOA serials obtained."
 	}
 
 	if rc != 2 {
-		if maxSerialDrift(serialList) > uint32(opts.delta) {
+		if maxSerialDrift(rn.serialList) > uint32(opts.delta) {
 			rc = 1
 		}
 	}
@@ -532,7 +538,8 @@ func main() {
 	if err != nil {
 		os.Exit(4)
 	}
-	status, message := run(zone, opts)
-	formatOutput(status, message, opts)
+	rn := NewRunner()
+	status, message := rn.run(zone, opts)
+	rn.formatOutput(status, message, opts)
 	os.Exit(status)
 }
