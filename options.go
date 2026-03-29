@@ -95,6 +95,10 @@ Usage: %s [Options] <zone>
 	opts.Qopts.timeout = time.Second * time.Duration(*timeoutp)
 	opts.Qopts.bufsize = uint16(bufsize)
 
+	if opts.json {
+		opts.sortresponse = true
+	}
+
 	if *help {
 		flag.Usage()
 		return "", opts, fmt.Errorf("help requested")
@@ -105,6 +109,19 @@ Usage: %s [Options] <zone>
 		if opts.masterIP == nil { // assume hostname
 			opts.masterName = dns.Fqdn(*master)
 		}
+	}
+
+	if *timeoutp <= 0 {
+		return "", opts, fmt.Errorf("-t timeout must be a positive integer")
+	}
+	if opts.Qopts.retries <= 0 {
+		return "", opts, fmt.Errorf("-r retries must be a positive integer")
+	}
+	if opts.delta < 0 {
+		return "", opts, fmt.Errorf("-d delta must be a non-negative integer")
+	}
+	if bufsize < 512 {
+		return "", opts, fmt.Errorf("-b buffer size must be at least 512")
 	}
 
 	if opts.V4Only && opts.V6Only {

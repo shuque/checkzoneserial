@@ -144,7 +144,7 @@ func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
 			}
 		}
 	default:
-		fmt.Printf("getIPAddresses: %d: invalid rrtype\n", rrtype)
+		fmt.Fprintf(os.Stderr, "getIPAddresses: %d: invalid rrtype\n", rrtype)
 	}
 
 	return ipList
@@ -376,7 +376,7 @@ func getMasterSerial(zone string, opts *Options) error {
 func printResult(r *Response, opts *Options) {
 
 	if r.err != nil {
-		fmt.Printf("Error: %s %s: couldn't obtain serial: %s\n", r.Nsname, r.ip, r.err.Error())
+		fmt.Fprintf(os.Stderr, "Error: %s %s: couldn't obtain serial: %s\n", r.Nsname, r.ip, r.err.Error())
 		return
 	}
 	printSerialLine(false, r.Serial, r.Nsname, r.ip, r.resptime, r.Nsid, opts)
@@ -417,7 +417,7 @@ func formatOutput(status int, message string, opts Options) {
 		fmt.Printf("%s\n", b)
 	} else {
 		if message != "" {
-			fmt.Printf("Error: %s\n", message)
+			fmt.Fprintf(os.Stderr, "Error: %s\n", message)
 		}
 	}
 }
@@ -485,15 +485,15 @@ func run(zone string, opts Options) (int, string) {
 	}
 
 	if opts.sortresponse || opts.json {
-		nsname_list := make([]string, 0, len(ResponseByName))
+		nsnameList := make([]string, 0, len(ResponseByName))
 
 		output.Responses = make([]Response, 0, len(ResponseByName))
 
 		for k := range ResponseByName {
-			nsname_list = append(nsname_list, k)
+			nsnameList = append(nsnameList, k)
 		}
-		sort.Sort(ByCanonicalOrder(nsname_list))
-		for _, nsname := range nsname_list {
+		sort.Sort(ByCanonicalOrder(nsnameList))
+		for _, nsname := range nsnameList {
 			responses := ResponseByName[nsname]
 			sort.Sort(ByIPversion(responses))
 			for _, r := range responses {
