@@ -337,7 +337,7 @@ func getMasterAddress(name string, opts *Options) net.IP {
 	return nil
 }
 
-func getMasterSerial(zone string, opts *Options) {
+func getMasterSerial(zone string, opts *Options) error {
 
 	var err error
 	var took time.Duration
@@ -350,9 +350,7 @@ func getMasterSerial(zone string, opts *Options) {
 		master.Name = opts.masterName
 		opts.masterIP = getMasterAddress(master.Name, opts)
 		if opts.masterIP == nil {
-			bailout(3,
-				fmt.Sprintf("Error: couldn't resolve master name: %s", master.Name),
-				*opts)
+			return fmt.Errorf("couldn't resolve master name: %s", master.Name)
 		}
 		master.IP = opts.masterIP.String()
 	} else {
@@ -362,18 +360,17 @@ func getMasterSerial(zone string, opts *Options) {
 
 	opts.masterSerial, took, nsid, err = getSerial(zone, opts.masterIP, *opts)
 
-	if err == nil {
-		master.Serial = opts.masterSerial
-		master.Resptime = took.Seconds() * 1000.0
-		serialList = append(serialList, opts.masterSerial)
-		printSerialLine(true, opts.masterSerial, opts.masterName, opts.masterIP, took, nsid, opts)
-	} else {
+	if err != nil {
 		master.Err = err.Error()
-		bailout(3,
-			fmt.Sprintf("Error: %s %s: couldn't obtain serial: %s\n",
-				opts.masterName, opts.masterIP, err.Error()),
-			*opts)
+		return fmt.Errorf("%s %s: couldn't obtain serial: %s",
+			opts.masterName, opts.masterIP, err.Error())
 	}
+
+	master.Serial = opts.masterSerial
+	master.Resptime = took.Seconds() * 1000.0
+	serialList = append(serialList, opts.masterSerial)
+	printSerialLine(true, opts.masterSerial, opts.masterName, opts.masterIP, took, nsid, opts)
+	return nil
 }
 
 func printResult(r *Response, opts *Options) {
@@ -404,7 +401,7 @@ func getAdditionalServers(opts *Options) []string {
 	return s
 }
 
-func bailout(status int, message string, opts Options) {
+func formatOutput(status int, message string, opts Options) {
 
 	output.Status = status
 	if status != 0 && message == "" {
@@ -423,25 +420,18 @@ func bailout(status int, message string, opts Options) {
 			fmt.Printf("Error: %s\n", message)
 		}
 	}
-
-	os.Exit(status)
 }
 
-func main() {
+func run(zone string, opts Options) (int, string) {
 
 	var err error
 	var rc int
 	var nsNameList []string
 	var requests []*Request
 
-	zone, opts, err := doFlags()
-	if err != nil {
-		os.Exit(4)
-	}
-
 	opts.resolvers, err = GetResolver(opts.resolvconf)
 	if err != nil {
-		bailout(2, fmt.Sprintf("Error getting resolver: %s", err.Error()), opts)
+		return 2, fmt.Sprintf("Error getting resolver: %s", err.Error())
 	}
 
 	if opts.additional != "" {
@@ -450,7 +440,7 @@ func main() {
 	if !opts.noqueryns {
 		nsNames, err := getNSnames(zone, &opts)
 		if err != nil {
-			bailout(1, err.Error(), opts)
+			return 1, err.Error()
 		}
 		nsNameList = append(nsNameList, nsNames...)
 	}
@@ -467,7 +457,9 @@ func main() {
 	}
 
 	if opts.masterIP != nil || opts.masterName != "" {
-		getMasterSerial(zone, &opts)
+		if err := getMasterSerial(zone, &opts); err != nil {
+			return 3, err.Error()
+		}
 	}
 
 	go func() {
@@ -515,7 +507,7 @@ func main() {
 	}
 
 	if serialList == nil {
-		bailout(2, "ERROR: no SOA serials obtained.\n", opts)
+		return 2, "ERROR: no SOA serials obtained."
 	}
 
 	if rc != 2 {
@@ -523,5 +515,15 @@ func main() {
 			rc = 1
 		}
 	}
-	bailout(rc, "", opts)
+	return rc, ""
+}
+
+func main() {
+	zone, opts, err := doFlags()
+	if err != nil {
+		os.Exit(4)
+	}
+	status, message := run(zone, opts)
+	formatOutput(status, message, opts)
+	os.Exit(status)
 }
