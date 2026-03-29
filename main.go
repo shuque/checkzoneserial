@@ -84,7 +84,7 @@ var (
 	ResponseByName = make(map[string][]Response)
 )
 
-// serialDistance returns the distance between two serial numbers
+// serialDistance returns the unsigned distance between two serial numbers
 // accounting for RFC 1982 serial number arithmetic (wrap at 2^32).
 func serialDistance(s1, s2 uint32) uint32 {
 	d := s1 - s2
@@ -92,6 +92,19 @@ func serialDistance(s1, s2 uint32) uint32 {
 		return s2 - s1
 	}
 	return d
+}
+
+// serialDelta returns the signed difference (master - slave) using
+// RFC 1982 arithmetic. Positive means the slave is behind the master.
+func serialDelta(master, slave uint32) int {
+	diff := master - slave
+	if diff == 0 {
+		return 0
+	}
+	if diff < (1 << 31) {
+		return int(diff)
+	}
+	return -int(slave - master)
 }
 
 // maxSerialDrift returns the maximum pairwise serial distance
@@ -201,7 +214,7 @@ func getSerialAsync(zone string, ip net.IP, nsName string, opts *Options) {
 	r.resptime = resptime
 	r.Resptime = resptime.Seconds() * 1000.0
 	if opts.masterIP != nil {
-		delta := int(opts.masterSerial) - int(serial)
+		delta := serialDelta(opts.masterSerial, serial)
 		r.Delta = &delta
 	}
 	r.err = err
@@ -293,7 +306,7 @@ func printSerialLine(isMaster bool, serial uint32, nsname string, nsip net.IP, e
 		if opts.masterIP == nil {
 			fmt.Printf("%15d %s %s %.2fms", serial, nsname, nsip, MilliSeconds(elapsed))
 		} else {
-			delta := int(opts.masterSerial) - int(serial)
+			delta := serialDelta(opts.masterSerial, serial)
 			fmt.Printf("%15d [%8d] %s %s %.2fms", serial, delta, nsname, nsip, MilliSeconds(elapsed))
 		}
 	}
