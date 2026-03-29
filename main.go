@@ -122,7 +122,7 @@ func maxSerialDrift(serials []uint32) uint32 {
 	return maxDist
 }
 
-func getIPAddresses(hostname string, rrtype uint16, opts *Options) []net.IP {
+func getIPAddresses(hostname string, rrtype uint16, opts Options) []net.IP {
 
 	var ipList []net.IP
 
@@ -150,7 +150,7 @@ func getIPAddresses(hostname string, rrtype uint16, opts *Options) []net.IP {
 	return ipList
 }
 
-func getSerial(zone string, ip net.IP, opts *Options) (serial uint32, took time.Duration, nsid string, err error) {
+func getSerial(zone string, ip net.IP, opts Options) (serial uint32, took time.Duration, nsid string, err error) {
 
 	var response *dns.Msg
 
@@ -198,7 +198,7 @@ func getSerial(zone string, ip net.IP, opts *Options) (serial uint32, took time.
 		ip.String())
 }
 
-func getSerialAsync(zone string, ip net.IP, nsName string, opts *Options) {
+func getSerialAsync(zone string, ip net.IP, nsName string, opts Options) {
 
 	defer wg.Done()
 
@@ -273,11 +273,11 @@ func getRequests(nsNameList []string, opts *Options) []*Request {
 		aList = make([]net.IP, 0)
 		if !opts.V4Only {
 			aList = append(aList,
-				getIPAddresses(nsName, dns.TypeAAAA, opts)...)
+				getIPAddresses(nsName, dns.TypeAAAA, *opts)...)
 		}
 		if !opts.V6Only {
 			aList = append(aList,
-				getIPAddresses(nsName, dns.TypeA, opts)...)
+				getIPAddresses(nsName, dns.TypeA, *opts)...)
 		}
 		for _, ip := range aList {
 			r = new(Request)
@@ -321,7 +321,7 @@ func printSerialLine(isMaster bool, serial uint32, nsname string, nsip net.IP, e
 func getMasterAddress(name string, opts *Options) net.IP {
 	// Try IPv6 if IPv4-only is not specified
 	if !opts.V4Only {
-		ipv6list := getIPAddresses(name, dns.TypeAAAA, opts)
+		ipv6list := getIPAddresses(name, dns.TypeAAAA, *opts)
 		if len(ipv6list) > 0 {
 			return ipv6list[0]
 		}
@@ -329,7 +329,7 @@ func getMasterAddress(name string, opts *Options) net.IP {
 
 	// Try IPv4 if IPv6-only is not specified
 	if !opts.V6Only {
-		ipv4list := getIPAddresses(name, dns.TypeA, opts)
+		ipv4list := getIPAddresses(name, dns.TypeA, *opts)
 		if len(ipv4list) > 0 {
 			return ipv4list[0]
 		}
@@ -361,7 +361,7 @@ func getMasterSerial(zone string, opts *Options) {
 		master.IP = opts.masterName
 	}
 
-	opts.masterSerial, took, nsid, err = getSerial(zone, opts.masterIP, opts)
+	opts.masterSerial, took, nsid, err = getSerial(zone, opts.masterIP, *opts)
 
 	if err == nil {
 		master.Serial = opts.masterSerial
@@ -471,7 +471,7 @@ func main() {
 		for _, x := range requests {
 			wg.Add(1)
 			tokens <- struct{}{}
-			go getSerialAsync(zone, x.nsip, x.nsname, &opts)
+			go getSerialAsync(zone, x.nsip, x.nsname, opts)
 		}
 		wg.Wait()
 		close(results)
