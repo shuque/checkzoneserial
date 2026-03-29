@@ -218,7 +218,7 @@ func getSerialAsync(zone string, ip net.IP, nsName string, opts Options) {
 	r.Serial = serial
 	r.Nsid = nsid
 	r.resptime = resptime
-	r.Resptime = resptime.Seconds() * 1000.0
+	r.Resptime = MilliSeconds(resptime)
 	if opts.masterIP != nil {
 		delta := serialDelta(opts.masterSerial, serial)
 		r.Delta = &delta
@@ -298,8 +298,8 @@ func getRequests(nsNameList []string, opts *Options) []*Request {
 	return requests
 }
 
-func MilliSeconds(duration time.Duration) float32 {
-	return float32(duration.Microseconds()) / 1000.0
+func MilliSeconds(duration time.Duration) float64 {
+	return float64(duration.Microseconds()) / 1000.0
 }
 
 func printSerialLine(isMaster bool, serial uint32, nsname string, nsip net.IP, elapsed time.Duration, nsid string, opts *Options) {
@@ -376,7 +376,7 @@ func getMasterSerial(zone string, opts *Options) error {
 	}
 
 	master.Serial = opts.masterSerial
-	master.Resptime = took.Seconds() * 1000.0
+	master.Resptime = MilliSeconds(took)
 	serialList = append(serialList, opts.masterSerial)
 	printSerialLine(true, opts.masterSerial, opts.masterName, opts.masterIP, took, nsid, opts)
 	return nil

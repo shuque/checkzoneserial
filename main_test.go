@@ -182,7 +182,7 @@ func TestMilliSeconds(t *testing.T) {
 	tests := []struct {
 		name     string
 		duration time.Duration
-		expected float32
+		expected float64
 	}{
 		{"one second", time.Second, 1000.0},
 		{"one millisecond", time.Millisecond, 1.0},
