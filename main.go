@@ -224,19 +224,17 @@ func getSerialAsync(zone string, ip net.IP, nsName string, opts Options) {
 	results <- r
 }
 
-func getNSnames(zone string, opts *Options) []string {
+func getNSnames(zone string, opts *Options) ([]string, error) {
 
 	var nsNameList []string
 
 	opts.Qopts.rdflag = true
 	response, err := SendQuery(zone, dns.TypeNS, opts.resolvers, opts.Qopts)
 	if err != nil {
-		bailout(1, err.Error(), *opts)
+		return nil, err
 	}
 	if response.MsgHdr.Rcode != dns.RcodeSuccess {
-		bailout(1,
-			fmt.Sprintf("%s response code: %s", zone, dns.RcodeToString[response.MsgHdr.Rcode]),
-			*opts)
+		return nil, fmt.Errorf("%s response code: %s", zone, dns.RcodeToString[response.MsgHdr.Rcode])
 	}
 	for _, rr := range response.Answer {
 		if rr.Header().Rrtype == dns.TypeNS {
@@ -244,12 +242,10 @@ func getNSnames(zone string, opts *Options) []string {
 		}
 	}
 	if nsNameList == nil {
-		bailout(1,
-			fmt.Sprintf("%s no nameserver records found", zone),
-			*opts)
+		return nil, fmt.Errorf("%s no nameserver records found", zone)
 	}
 
-	return nsNameList
+	return nsNameList, nil
 }
 
 func getRequests(nsNameList []string, opts *Options) []*Request {
@@ -449,7 +445,11 @@ func main() {
 		nsNameList = getAdditionalServers(&opts)
 	}
 	if !opts.noqueryns {
-		nsNameList = append(nsNameList, getNSnames(zone, &opts)...)
+		nsNames, err := getNSnames(zone, &opts)
+		if err != nil {
+			bailout(1, err.Error(), opts)
+		}
+		nsNameList = append(nsNameList, nsNames...)
 	}
 	requests = getRequests(nsNameList, &opts)
 
