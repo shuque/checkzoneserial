@@ -56,7 +56,7 @@ func doFlags() (string, Options, error) {
 	flag.BoolVar(&opts.V4Only, "4", false, "use IPv4 only")
 	flag.BoolVar(&opts.sortresponse, "s", false, "sort responses")
 	flag.BoolVar(&opts.json, "j", false, "output json")
-	flag.BoolVar(&opts.Qopts.tcp, "c", false, "use IPv4 only")
+	flag.BoolVar(&opts.Qopts.tcp, "c", false, "use TCP for queries")
 	flag.StringVar(&opts.resolvconf, "cf", "", "use alternate resolv.conf file")
 	master := flag.String("m", "", "master server name or address")
 	flag.StringVar(&opts.additional, "a", "", "additional nameservers: n1,n2..")
