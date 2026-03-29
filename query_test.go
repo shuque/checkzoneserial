@@ -166,18 +166,21 @@ type mockDNSServer struct {
 }
 
 func newMockDNSServer(t *testing.T, handler dns.Handler) *mockDNSServer {
+	udpReady := make(chan struct{})
+	tcpReady := make(chan struct{})
+
 	udpServer := &dns.Server{
-		Addr:    ":0",
-		Net:     "udp",
-		Handler: handler,
+		Addr:              ":0",
+		Net:               "udp",
+		Handler:           handler,
+		NotifyStartedFunc: func() { close(udpReady) },
 	}
 	tcpServer := &dns.Server{
-		Addr:    ":0",
-		Net:     "tcp",
-		Handler: handler,
+		Addr:              ":0",
+		Net:               "tcp",
+		Handler:           handler,
+		NotifyStartedFunc: func() { close(tcpReady) },
 	}
-
-	ready := make(chan struct{})
 
 	go func() {
 		if err := udpServer.ListenAndServe(); err != nil {
@@ -190,16 +193,17 @@ func newMockDNSServer(t *testing.T, handler dns.Handler) *mockDNSServer {
 		}
 	}()
 
-	time.Sleep(100 * time.Millisecond)
-	udpAddr := udpServer.PacketConn.LocalAddr().String()
-	tcpAddr := tcpServer.Listener.Addr().String()
+	<-udpReady
+	<-tcpReady
+
+	ready := make(chan struct{})
 	close(ready)
 
 	return &mockDNSServer{
 		udpServer: udpServer,
 		tcpServer: tcpServer,
-		udpAddr:   udpAddr,
-		tcpAddr:   tcpAddr,
+		udpAddr:   udpServer.PacketConn.LocalAddr().String(),
+		tcpAddr:   tcpServer.Listener.Addr().String(),
 		ready:     ready,
 	}
 }
