@@ -84,18 +84,29 @@ var (
 	ResponseByName = make(map[string][]Response)
 )
 
-func minmax(a []uint32) (min uint32, max uint32) {
-	min = a[0]
-	max = a[0]
-	for _, value := range a {
-		if value < min {
-			min = value
-		}
-		if value > max {
-			max = value
+// serialDistance returns the distance between two serial numbers
+// accounting for RFC 1982 serial number arithmetic (wrap at 2^32).
+func serialDistance(s1, s2 uint32) uint32 {
+	d := s1 - s2
+	if d > (1 << 31) {
+		return s2 - s1
+	}
+	return d
+}
+
+// maxSerialDrift returns the maximum pairwise serial distance
+// across a list of serial numbers, using RFC 1982 arithmetic.
+func maxSerialDrift(serials []uint32) uint32 {
+	var maxDist uint32
+	for i := 0; i < len(serials); i++ {
+		for j := i + 1; j < len(serials); j++ {
+			d := serialDistance(serials[i], serials[j])
+			if d > maxDist {
+				maxDist = d
+			}
 		}
 	}
-	return min, max
+	return maxDist
 }
 
 func getIPAddresses(hostname string, rrtype uint16, opts *Options) []net.IP {
@@ -492,8 +503,7 @@ func main() {
 	}
 
 	if rc != 2 {
-		min, max := minmax(serialList)
-		if (max - min) > uint32(opts.delta) {
+		if maxSerialDrift(serialList) > uint32(opts.delta) {
 			rc = 1
 		}
 	}
