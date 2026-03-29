@@ -163,6 +163,9 @@ func getSerial(zone string, ip net.IP, opts Options) (serial uint32, took time.D
 	if err != nil {
 		return serial, took, nsid, err
 	}
+	if response == nil {
+		return serial, took, nsid, fmt.Errorf("no response from %s", ip.String())
+	}
 	switch response.MsgHdr.Rcode {
 	case dns.RcodeSuccess:
 		break

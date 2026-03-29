@@ -137,7 +137,7 @@ func SendQuery(qname string, qtype uint16, ipaddrs []net.IP, qopts QueryOptions)
 	}
 
 	response, err := SendQueryUDP(query, ipaddrs, qopts)
-	if err == nil && response.MsgHdr.Truncated {
+	if err == nil && response != nil && response.MsgHdr.Truncated {
 		return SendQueryTCP(query, ipaddrs, qopts)
 	}
 
