@@ -23,7 +23,7 @@ var progname = path.Base(os.Args[0])
 // Status codes
 var StatusCode = map[int]string{
 	0: "",
-	1: "serial mismatch or exceeds drift",
+	1: "serial mismatch or exceeds allowed drift",
 	2: "server issues",
 	3: "master server error",
 	4: "program invocation error",
@@ -527,7 +527,7 @@ func (rn *Runner) run(zone string, opts Options) (int, string) {
 
 	if rc != 2 {
 		if maxSerialDrift(rn.serialList) > uint32(opts.delta) {
-			rc = 1
+			return 1, fmt.Sprintf("serial mismatch or exceeds allowed drift (%d)", opts.delta)
 		}
 	}
 	return rc, ""
