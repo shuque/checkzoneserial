@@ -19,6 +19,43 @@ servers are queried in parallel.
 
 Just run 'go build'. This will generate the executable 'checkzoneserial'.
 
+### Running the tests
+
+The test suite is self-contained (it uses in-process mock DNS servers on
+loopback) and needs no network access.
+
+Run the entire suite:
+
+```
+$ go test
+```
+
+For more detail, and to see coverage:
+
+```
+$ go test -v            # verbose, list each test as it runs
+$ go test -cover        # print the overall statement coverage
+$ go test -race         # run with the data race detector
+```
+
+Run tests selectively with the `-run` flag, which takes a regular
+expression matched against test (and subtest) names:
+
+```
+$ go test -run TestSendQuery              # all tests whose name matches
+$ go test -run TestGetSerial -v           # a single test, verbosely
+$ go test -run 'TestRun/differing'        # a specific subtest of TestRun
+```
+
+To generate and inspect a coverage profile, including a per-function
+breakdown and an annotated HTML report:
+
+```
+$ go test -coverprofile=cover.out
+$ go tool cover -func=cover.out           # per-function coverage
+$ go tool cover -html=cover.out           # open annotated source in a browser
+```
+
 ### Usage
 
 ```

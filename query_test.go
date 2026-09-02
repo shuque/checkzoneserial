@@ -217,6 +217,127 @@ func (m *mockDNSServer) close() {
 	}
 }
 
+// newSharedPortMockServer starts UDP and TCP mock servers on the SAME port
+// (UDP and TCP port namespaces are independent), so a query that falls back
+// from UDP to TCP reaches the same listener — as it would against a real
+// nameserver. Returns the server plus its host and port strings.
+func newSharedPortMockServer(t *testing.T, handler dns.Handler) (*mockDNSServer, string, string) {
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Failed to open UDP socket: %v", err)
+	}
+	host, port, _ := net.SplitHostPort(pc.LocalAddr().String())
+	l, err := net.Listen("tcp", net.JoinHostPort(host, port))
+	if err != nil {
+		pc.Close()
+		t.Fatalf("Failed to open TCP socket on shared port: %v", err)
+	}
+
+	udpReady := make(chan struct{})
+	tcpReady := make(chan struct{})
+
+	udpServer := &dns.Server{
+		PacketConn:        pc,
+		Net:               "udp",
+		Handler:           handler,
+		NotifyStartedFunc: func() { close(udpReady) },
+	}
+	tcpServer := &dns.Server{
+		Listener:          l,
+		Net:               "tcp",
+		Handler:           handler,
+		NotifyStartedFunc: func() { close(tcpReady) },
+	}
+
+	go func() {
+		if err := udpServer.ActivateAndServe(); err != nil {
+			t.Errorf("Failed to start mock UDP DNS server: %v", err)
+		}
+	}()
+	go func() {
+		if err := tcpServer.ActivateAndServe(); err != nil {
+			t.Errorf("Failed to start mock TCP DNS server: %v", err)
+		}
+	}()
+
+	<-udpReady
+	<-tcpReady
+
+	ready := make(chan struct{})
+	close(ready)
+
+	return &mockDNSServer{
+		udpServer: udpServer,
+		tcpServer: tcpServer,
+		udpAddr:   pc.LocalAddr().String(),
+		tcpAddr:   l.Addr().String(),
+		ready:     ready,
+	}, host, port
+}
+
+// truncationHandler sets the TC bit on UDP responses (with no answer) and
+// returns the full SOA answer over TCP, exercising the UDP->TCP fallback.
+func truncationHandler(serial uint32) dns.Handler {
+	return dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
+		m := new(dns.Msg)
+		m.SetReply(r)
+		if w.RemoteAddr().Network() == "udp" {
+			m.Truncated = true
+			w.WriteMsg(m)
+			return
+		}
+		m.Answer = []dns.RR{
+			&dns.SOA{
+				Hdr: dns.RR_Header{
+					Name:   r.Question[0].Name,
+					Rrtype: dns.TypeSOA,
+					Class:  dns.ClassINET,
+					Ttl:    3600,
+				},
+				Ns:     "ns1.example.com.",
+				Mbox:   "admin.example.com.",
+				Serial: serial,
+			},
+		}
+		w.WriteMsg(m)
+	})
+}
+
+// TestSendQueryTruncationFallback drives SendQuery (the wrapper) end to end:
+// a truncated UDP reply must trigger a TCP retry that returns the full answer.
+func TestSendQueryTruncationFallback(t *testing.T) {
+	server, host, port := newSharedPortMockServer(t, truncationHandler(2024010100))
+	defer server.close()
+
+	qopts := QueryOptions{
+		timeout: 2 * time.Second,
+		retries: 1,
+		bufsize: defaultBufsize,
+		port:    port,
+	}
+
+	resp, err := SendQuery("example.com.", dns.TypeSOA, []net.IP{net.ParseIP(host)}, qopts)
+	if err != nil {
+		t.Fatalf("SendQuery() unexpected error: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("SendQuery() returned nil response")
+	}
+	if resp.Truncated {
+		t.Error("SendQuery() response still truncated; expected TCP fallback result")
+	}
+	if len(resp.Answer) == 0 {
+		t.Fatal("SendQuery() TCP fallback returned no answer")
+	}
+	soa, ok := resp.Answer[0].(*dns.SOA)
+	if !ok {
+		t.Fatalf("SendQuery() answer is not SOA: %T", resp.Answer[0])
+	}
+	if soa.Serial != 2024010100 {
+		t.Errorf("SendQuery() serial = %d, want 2024010100", soa.Serial)
+	}
+}
+
 // TestSendQuery tests the SendQuery function with various scenarios
 func TestSendQuery(t *testing.T) {
 	tests := []struct {

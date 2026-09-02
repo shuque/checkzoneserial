@@ -247,6 +247,40 @@ func TestMasterServerOptions(t *testing.T) {
 	}
 }
 
+func TestFlagValidationErrors(t *testing.T) {
+	// Save original args and restore them after the test
+	origArgs := os.Args
+	defer func() { os.Args = origArgs }()
+
+	tests := []struct {
+		name        string
+		args        []string
+		errContains string
+	}{
+		{"non-positive timeout", []string{"cmd", "-t", "0", "example.com"}, "timeout must be a positive integer"},
+		{"non-positive retries", []string{"cmd", "-r", "0", "example.com"}, "retries must be a positive integer"},
+		{"negative delta", []string{"cmd", "-d", "-1", "example.com"}, "delta must be a non-negative integer"},
+		{"buffer too small", []string{"cmd", "-b", "100", "example.com"}, "buffer size must be at least 512"},
+		{"no zone argument", []string{"cmd"}, "incorrect number of arguments"},
+		{"too many arguments", []string{"cmd", "example.com", "example.net"}, "incorrect number of arguments"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetFlags()
+			os.Args = tt.args
+			_, _, err := doFlags()
+			if err == nil {
+				t.Fatalf("doFlags(%v) expected error, got nil", tt.args)
+			}
+			if !contains(err.Error(), tt.errContains) {
+				t.Errorf("doFlags(%v) error = %q, want containing %q",
+					tt.args, err.Error(), tt.errContains)
+			}
+		})
+	}
+}
+
 func TestAdditionalNameservers(t *testing.T) {
 	// Save original args and restore them after the test
 	origArgs := os.Args
